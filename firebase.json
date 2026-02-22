@@ -1,0 +1,68 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "barapp-social",
+          "appId": "1:449845738118:android:a5d411e040b6e654a5ef07",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "barapp-social",
+          "appId": "1:449845738118:ios:815f57244382267ea5ef07",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "barapp-social",
+          "configurations": {
+            "android": "1:449845738118:android:a5d411e040b6e654a5ef07",
+            "ios": "1:449845738118:ios:815f57244382267ea5ef07",
+            "web": "1:449845738118:web:7cd92c2622af8cbda5ef07"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**/*.otf",
+        "headers": [
+          {"key": "Content-Type", "value": "font/otf"},
+          {"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}
+        ]
+      },
+      {
+        "source": "**/*.ttf",
+        "headers": [
+          {"key": "Content-Type", "value": "font/ttf"},
+          {"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}
+        ]
+      },
+      {
+        "source": "**/*.woff2",
+        "headers": [
+          {"key": "Content-Type", "value": "font/woff2"},
+          {"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,96 @@
+name: barapp
+description: BarApp – guía social de restaurantes, bares, cafés y heladerías.
+publish_to: 'none'
+version: 2.0.4+7
+
+environment:
+  sdk: ">=3.7.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.1.0
+  firebase_storage: ^13.0.4
+
+  google_sign_in: ^6.2.1
+
+  # UI / Utils
+  provider: ^6.1.2
+  flutter_svg: ^2.2.2
+  cached_network_image: ^3.4.1
+  url_launcher: ^6.2.6
+
+  # Multimedia
+  video_player: ^2.10.0
+  image_picker: ^1.2.1
+  image_cropper: ^11.0.0
+  video_compress: ^3.1.2
+  audioplayers: ^5.2.1
+
+  # Geoloc / Mapas
+  geolocator: ^14.0.2
+  geocoding: ^4.0.0
+  google_maps_flutter: ^2.6.1
+
+  # Permisos
+  permission_handler: ^12.0.1
+
+
+  # Utilidades
+  intl: ^0.20.2
+  uuid: ^4.3.3
+  path_provider: ^2.1.5
+  flutter_cache_manager: ^3.4.0
+  shimmer: ^3.0.0
+  fl_chart: ^0.66.0
+  blue_thermal_printer: ^1.2.3  # Para conectar por Bluetooth
+  esc_pos_utils_plus: ^2.0.3    # Para "traducir" texto a idioma impresora
+  
+  # Para la WEB (Generar PDF y mandar a imprimir)
+  pdf: ^3.10.4
+  printing: ^5.11.0
+  
+
+  # Apple Sign-In
+  sign_in_with_apple: ^7.0.1
+  crypto: ^3.0.7
+  font_awesome_flutter: ^10.12.0
+  firebase_messaging: ^16.0.4
+  file_picker: ^10.3.7
+  flutter_local_notifications: ^19.5.0
+  http: ^1.6.0
+  universal_io: ^2.3.1
+  shared_preferences: ^2.5.4
+  qr_flutter: ^4.1.0
+  confetti: ^0.8.0
+  phosphor_flutter: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/places/
+    - assets/sounds/
+    - assets/images/restaurant.png
+    - assets/images/pattern_bg.png
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21 # Importante para soporte moderno
+  # Opcional: Icono adaptable (Android 8+) para que se vea bien en círculos/cuadrados
+  adaptive_icon_background: "#FF5722" # TU COLOR NARANJA HEX AQUÍ
+  adaptive_icon_foreground: "assets/icon/foreground_icon.png" # Solo el logo blanco con fondo transparente

@@ -1,0 +1,57 @@
+// android/build.gradle  (GROOVY)
+
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+/**
+ * Fuerza Java 17 y Kotlin jvmTarget=17 en TODOS los subproyectos
+ * que sean LIBRERÍAS (plugins de terceros).
+ * * El módulo ':app' (que es KTS) se configurará en su propio archivo.
+ */
+subprojects { subproj ->
+    
+    // Solo configuramos las LIBRERÍAS (plugins) desde aquí
+    plugins.withId('com.android.library') {
+        
+        // 1. Esto se aplica a TODAS las librerías (Java o Kotlin)
+        //    (ej: cloud_firestore, sign_in_with_apple)
+        android {
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+        
+        // 2. AHORA, para esta MISMA librería, chequeamos si ADEMÁS es Kotlin
+        plugins.withId('org.jetbrains.kotlin.android') {
+            // 3. Si entra aquí, es una lib de Android Y Kotlin (ej: sign_in_with_apple)
+            //    No entrará para cloud_firestore.
+            kotlin {
+                jvmToolchain(17)
+            }
+        }
+    }
+
+    // --- Hemos ELIMINADO el bloque anidado que estaba aquí antes ---
+
+    // Fallbacks (está bien dejarlos)
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = '17'
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        sourceCompatibility = '17'
+        targetCompatibility = '17'
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}

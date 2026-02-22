@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "449845738118",
+    "project_id": "barapp-social",
+    "storage_bucket": "barapp-social.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:449845738118:android:cb426ea5c011db94a5ef07",
+        "android_client_info": {
+          "package_name": "com.example.barapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCu2mf7qiF2QjpMh_HGh4sp_lWvEK7sVrk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

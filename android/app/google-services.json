@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "449845738118",
+    "project_id": "barapp-social",
+    "storage_bucket": "barapp-social.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:449845738118:android:a5d411e040b6e654a5ef07",
+        "android_client_info": {
+          "package_name": "com.mariano.barapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "449845738118-90g05aqluce6jjqs4vf16mmtp288ogn2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mariano.barapp",
+            "certificate_hash": "e87c8398950e247138df7ec2d72e3f97fe279691"
+          }
+        },
+        {
+          "client_id": "449845738118-a8ct1feehq4ghfo0gj71nf7ast3odj3t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCu2mf7qiF2QjpMh_HGh4sp_lWvEK7sVrk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "449845738118-a8ct1feehq4ghfo0gj71nf7ast3odj3t.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "449845738118-da0ur97pmrfl8atbemclq55smgbuaur9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mariano.barapp.desktop"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
