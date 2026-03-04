@@ -31,6 +31,12 @@ class _CommentModalState extends State<CommentModal> {
   }
 
   @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(

@@ -29,6 +29,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
   final List<UnifiedPost> _comunidadPosts = [];
   final Set<String> _preloadedImages = {};
   bool _isPreloading = false;
+  bool _hasLoaded = false; // true al recibir el primer snapshot (aunque venga vacío)
 
   @override
   void initState() {
@@ -67,6 +68,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                 ),
               );
             }
+            _hasLoaded = true; // Primer snapshot recibido — ya sabemos si hay datos o no
             // Precargar imágenes de los primeros posts
             _preloadPostImages();
           });
@@ -383,7 +385,6 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
       context: context,
       builder:
           (ctx) => StatefulBuilder(
-            // Necesario para que el dropdown funcione dentro del dialog
             builder:
                 (context, setModalState) => AlertDialog(
                   backgroundColor: const Color(0xFF242526),
@@ -492,7 +493,15 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                             _showSuccessReportDialog(context);
                           }
                         } catch (e) {
-                          // Error de permisos o red
+                          debugPrint('Error enviando reporte: $e');
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('No se pudo enviar el reporte. Intentá de nuevo.'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                          }
                         }
                       },
                       child: const Text('Enviar Reporte'),
@@ -500,7 +509,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                   ],
                 ),
           ),
-    );
+    ).then((_) => detallesController.dispose());
   }
 
   // NUEVO: El cartel de confirmación visual
@@ -558,7 +567,7 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
   }
 
   // 1. LISTA DE SUPER ADMINS (Pon tu UID aquí)
-  final List<String> _superAdmins = [
+  static const List<String> _superAdmins = [
     'TpOkGBVXlLZVSQhfCdCrZ6R82g42', // <--- PEGA TU UID AQUÍ PARA TENER PODERES
     'okkS6brpDKg9FYkOqYp9t5OfPTv2',
   ];
@@ -618,8 +627,15 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
             ),
       ),
       body:
-          combinedPosts.isEmpty
-              ? Center(child: const CircularProgressIndicator())
+          !_hasLoaded
+              ? const Center(child: CircularProgressIndicator())
+              : combinedPosts.isEmpty
+              ? const Center(
+                  child: Text(
+                    'Sé el primero en publicar algo 🎉',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
               : ListView.builder(
                 padding: const EdgeInsets.only(top: 8, bottom: 80),
                 itemCount: combinedPosts.length,

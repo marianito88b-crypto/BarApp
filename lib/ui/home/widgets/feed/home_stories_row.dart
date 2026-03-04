@@ -104,8 +104,8 @@ class _HomeStoriesRowState extends State<HomeStoriesRow> {
         storiesByAuthor.forEach((authorId, stories) {
           if (stories.isEmpty) return;
           
-          // Ordenar historias del mismo autor por fecha (más reciente primero)
-          stories.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          // Ordenar historias del mismo autor por fecha (más antigua primero = orden natural de lectura)
+          stories.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           
           final firstStory = stories.first;
           final group = StoryGroup(

@@ -598,7 +598,7 @@ Future<void> _openComments(StoryItem story) async {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) {
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setModalState) {
       final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
 
       return Padding(
@@ -781,8 +781,7 @@ Future<void> _openComments(StoryItem story) async {
                           // 🧹 LIMPIEZA DE PALABRAS:
                           final String textClean = TextFilterService.sanitizeText(text);
 
-                          sending = true;
-                          (ctx as Element).markNeedsBuild();
+                          setModalState(() => sending = true);
 
                           try {
                             final storyRef = FirebaseFirestore.instance
@@ -833,8 +832,7 @@ Future<void> _openComments(StoryItem story) async {
                               );
                             }
                           } finally {
-                            sending = false;
-                            (ctx).markNeedsBuild();
+                            if (ctx.mounted) setModalState(() => sending = false);
                           }
                         },
                   icon: sending
@@ -854,8 +852,9 @@ Future<void> _openComments(StoryItem story) async {
           ],
         ),
       );
-    },
+    },),  // cierre StatefulBuilder
   ).whenComplete(() {
+    controller.dispose(); // dispose del controlador al cerrar el modal
     if (mounted) _togglePause(false); // Reanudar al cerrar modal/teclado
   });
 }
@@ -948,6 +947,7 @@ Positioned.fill(
                     extra: _timeElapsedText(story),
                     onClose: () => Navigator.of(context).maybePop(),
                     onShowOptions: _showOptions,
+                    canShowOptions: story.authorId == _currentUserId,
                     paused: _paused,
                   ),
                 ],
@@ -1345,7 +1345,8 @@ class _HeaderBar extends StatelessWidget {
   final bool isFeatured;
   final String extra;
   final VoidCallback onClose;
-  final VoidCallback onShowOptions; 
+  final VoidCallback onShowOptions;
+  final bool canShowOptions; // solo mostrar el boton en historias propias
   final bool paused;
 
   const _HeaderBar({
@@ -1354,7 +1355,8 @@ class _HeaderBar extends StatelessWidget {
     required this.isFeatured,
     required this.extra,
     required this.onClose,
-    required this.onShowOptions, 
+    required this.onShowOptions,
+    required this.canShowOptions,
     required this.paused,
   });
 
@@ -1422,12 +1424,13 @@ class _HeaderBar extends StatelessWidget {
             child: Icon(Icons.pause_rounded, color: Colors.white70, size: 18),
           ),
         
-        IconButton(
-          onPressed: onShowOptions,
-          icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-          tooltip: 'Opciones',
-          style: IconButton.styleFrom(backgroundColor: Colors.black.withValues(alpha: 0.2)),
-        ),
+        if (canShowOptions)
+          IconButton(
+            onPressed: onShowOptions,
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+            tooltip: 'Opciones',
+            style: IconButton.styleFrom(backgroundColor: Colors.black.withValues(alpha: 0.2)),
+          ),
 
         IconButton(
           onPressed: onClose,
