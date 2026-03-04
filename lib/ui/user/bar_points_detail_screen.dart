@@ -3,9 +3,12 @@ import 'package:confetti/confetti.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 
 import '../../services/barpoints_service.dart';
+import '../../utils/barpoints_logic.dart';
+import 'widgets/barpoints/historial_row.dart';
+import 'widgets/barpoints/medalla_hito.dart';
+import 'widgets/barpoints/reward_card.dart';
 
 /// Pantalla de detalle de BarPoints: billetera virtual con historial,
 /// educación del programa, grid de canje y bases legales.
@@ -240,19 +243,8 @@ class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
     if (totalPuntos >= 500) {
       return _buildProgressBarMaxReached(niveles);
     }
-    final siguienteHito = niveles.firstWhere(
-      (n) => totalPuntos < n,
-      orElse: () => 500,
-    );
-    final hitoAnterior = niveles.lastWhere(
-      (n) => n <= totalPuntos,
-      orElse: () => 0,
-    );
-    final rango = siguienteHito - hitoAnterior;
-    final progreso = rango > 0
-        ? (totalPuntos - hitoAnterior) / rango
-        : 1.0;
-    final textoProgreso = 'Faltan ${siguienteHito - totalPuntos} pts para ${BarPointsService.nivelesCanje[siguienteHito]}%';
+    final progreso = BarPointsLogic.progresoHaciaHito(totalPuntos);
+    final textoProgreso = BarPointsLogic.textoProgreso(totalPuntos) ?? '';
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -316,7 +308,7 @@ class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
                 final alcanzado = totalPuntos >= pts;
                 return Padding(
                   padding: const EdgeInsets.only(right: 16),
-                  child: _MedallaHito(
+                  child: MedallaHito(
                     puntos: pts,
                     descuento: BarPointsService.nivelesCanje[pts]!,
                     alcanzado: alcanzado,
@@ -375,7 +367,7 @@ class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
               children: niveles.map((pts) {
                 return Padding(
                   padding: const EdgeInsets.only(right: 16),
-                  child: _MedallaHito(
+                  child: MedallaHito(
                     puntos: pts,
                     descuento: BarPointsService.nivelesCanje[pts]!,
                     alcanzado: true,
@@ -577,7 +569,7 @@ class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
               final pts = e.key;
               final desc = e.value;
               final desbloqueado = totalPuntos >= pts;
-              return _RewardCard(
+              return RewardCard(
                 puntos: pts,
                 descuento: desc,
                 desbloqueado: desbloqueado,
@@ -839,7 +831,7 @@ class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
                 final concepto = d['concepto'] as String? ?? 'Movimiento';
                 final monto = (d['monto'] as num?)?.toInt() ?? 0;
                 final fecha = d['fecha'] as Timestamp?;
-                return _HistorialRow(
+                return HistorialRow(
                   concepto: concepto,
                   monto: monto,
                   fecha: fecha?.toDate(),
@@ -930,190 +922,3 @@ class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
   }
 }
 
-class _MedallaHito extends StatelessWidget {
-  final int puntos;
-  final int descuento;
-  final bool alcanzado;
-
-  const _MedallaHito({
-    required this.puntos,
-    required this.descuento,
-    required this.alcanzado,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final (icon, color) = switch (puntos) {
-      100 => (Icons.military_tech, const Color(0xFFCD7F32)), // Bronce
-      250 => (Icons.military_tech, const Color(0xFFC0C0C0)), // Plata
-      400 => (Icons.military_tech, const Color(0xFFFFD700)), // Oro
-      500 => (Icons.diamond, const Color(0xFF4DD0E1)), // Diamante
-      _ => (Icons.star, Colors.orangeAccent),
-    };
-    return Tooltip(
-      message: '$puntos pts → $descuento%',
-      child: Icon(
-        icon,
-        size: 22,
-        color: alcanzado ? color : Colors.white.withValues(alpha: 0.25),
-      ),
-    );
-  }
-}
-
-class _RewardCard extends StatelessWidget {
-  final int puntos;
-  final int descuento;
-  final bool desbloqueado;
-  final int totalPuntos;
-  final VoidCallback onCanjear;
-
-  const _RewardCard({
-    required this.puntos,
-    required this.descuento,
-    required this.desbloqueado,
-    required this.totalPuntos,
-    required this.onCanjear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final (icon, color) = switch (puntos) {
-      100 => (Icons.military_tech, const Color(0xFFCD7F32)),
-      250 => (Icons.military_tech, const Color(0xFFC0C0C0)),
-      400 => (Icons.military_tech, const Color(0xFFFFD700)),
-      500 => (Icons.diamond, const Color(0xFF4DD0E1)),
-      _ => (Icons.star, Colors.orangeAccent),
-    };
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: desbloqueado
-            ? color.withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: desbloqueado
-              ? color.withValues(alpha: 0.5)
-              : Colors.white.withValues(alpha: 0.08),
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            desbloqueado ? icon : Icons.lock_rounded,
-            size: 36,
-            color: desbloqueado ? color : Colors.white38,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$puntos pts',
-            style: TextStyle(
-              color: desbloqueado ? Colors.white : Colors.white54,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            '$descuento% descuento',
-            style: TextStyle(
-              color: desbloqueado ? color : Colors.white38,
-              fontSize: 13,
-            ),
-          ),
-          if (desbloqueado) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onCanjear,
-                icon: const Icon(Icons.card_giftcard, size: 18),
-                label: const Text('Canjear Cupón'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.orangeAccent,
-                  foregroundColor: Colors.black87,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-              ),
-            ),
-          ] else ...[
-            const SizedBox(height: 6),
-            Text(
-              'Faltan ${puntos - totalPuntos} pts',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HistorialRow extends StatelessWidget {
-  final String concepto;
-  final int monto;
-  final DateTime? fecha;
-
-  const _HistorialRow({
-    required this.concepto,
-    required this.monto,
-    required this.fecha,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isCredito = monto >= 0;
-    final color = isCredito ? Colors.greenAccent : Colors.redAccent;
-    final prefijo = isCredito ? '+' : '';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  concepto,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (fecha != null)
-                  Text(
-                    DateFormat('dd/MM/yy').format(fecha!),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: 12,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Text(
-            '$prefijo$monto',
-            style: TextStyle(
-              color: color,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
