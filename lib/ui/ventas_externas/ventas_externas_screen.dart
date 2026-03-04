@@ -44,9 +44,14 @@ class _VentasExternasScreenState extends State<VentasExternasScreen> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: _tab == 0
-                ? VentaRapidaTab(placeId: widget.placeId)
-                : VentasExternasProductosScreen(placeId: widget.placeId),
+            // IndexedStack preserva el estado (carrito) al cambiar de tab
+            child: IndexedStack(
+              index: _tab,
+              children: [
+                VentaRapidaTab(placeId: widget.placeId),
+                VentasExternasProductosScreen(placeId: widget.placeId),
+              ],
+            ),
           ),
         ],
       ),

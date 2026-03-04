@@ -40,6 +40,14 @@ class _ConfigMobileState extends State<ConfigMobile> with ConfigLogicMixin {
       child: StreamBuilder<DocumentSnapshot>(
         stream: _placeStream,
         builder: (context, snap) {
+          if (snap.hasError) {
+            return const Center(
+              child: Text(
+                'Error al cargar la configuración',
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            );
+          }
           if (!snap.hasData) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.orangeAccent),

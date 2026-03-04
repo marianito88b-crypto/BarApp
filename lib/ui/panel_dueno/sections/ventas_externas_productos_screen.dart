@@ -82,6 +82,14 @@ class _VentasExternasProductosScreenState
     return StreamBuilder<QuerySnapshot>(
       stream: _menuStream,
       builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(
+            child: Text(
+              'Error al cargar el menú',
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          );
+        }
         if (!snap.hasData) {
           return const Center(
             child: CircularProgressIndicator(color: Colors.orangeAccent),

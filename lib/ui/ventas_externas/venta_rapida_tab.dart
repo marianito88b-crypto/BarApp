@@ -23,6 +23,9 @@ class _VentaRapidaTabState extends State<VentaRapidaTab>
   String _metodoSeleccionado = 'Efectivo';
   Map<String, double> _pagoMixto = {};
 
+  // Control de carga
+  bool _isLoading = false;
+
   @override
   void dispose() {
     _montoCtrl.dispose();
@@ -117,11 +120,20 @@ class _VentaRapidaTabState extends State<VentaRapidaTab>
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: _registrarVenta,
-              child: const Text(
-                "REGISTRAR VENTA",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              onPressed: _isLoading ? null : _registrarVenta,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.black,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      "REGISTRAR VENTA",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
           ),
         ],
@@ -197,59 +209,65 @@ class _VentaRapidaTabState extends State<VentaRapidaTab>
       return;
     }
 
-    // Definir Canal
-    final String canalReal = (_canalSeleccionado == 'Otro' && _canalCustom != null)
-        ? _canalCustom!
-        : _canalSeleccionado;
+    setState(() => _isLoading = true);
 
-    // Construir items ficticios para venta rápida
-    final items = [
-      {
-        'cantidad': 1,
-        'nombre': 'Venta Rápida ($canalReal)',
-        'precio': montoTotal,
-        'total': montoTotal,
-        'id': 'GENERICO',
-      }
-    ];
+    try {
+      // Definir Canal
+      final String canalReal = (_canalSeleccionado == 'Otro' && _canalCustom != null)
+          ? _canalCustom!
+          : _canalSeleccionado;
 
-    // Obtener la nota si fue ingresada
-    final String? nota = _notaCtrl.text.trim().isEmpty ? null : _notaCtrl.text.trim();
+      // Construir items ficticios para venta rápida
+      final items = [
+        {
+          'cantidad': 1,
+          'nombre': 'Venta Rápida ($canalReal)',
+          'precio': montoTotal,
+          'total': montoTotal,
+          'id': 'GENERICO',
+        }
+      ];
 
-    // Usar el Mixin para validar y registrar
-    final success = await validarYRegistrarVenta(
-      placeId: widget.placeId,
-      items: items,
-      total: montoTotal,
-      metodoSeleccionado: _metodoSeleccionado,
-      pagoMixto: _pagoMixto,
-      canal: _canalSeleccionado,
-      canalCustom: _canalCustom,
-      nota: nota,
-    );
+      // Obtener la nota si fue ingresada
+      final String? nota = _notaCtrl.text.trim().isEmpty ? null : _notaCtrl.text.trim();
 
-    if (!mounted) return;
-
-    if (success) {
-      // Limpieza completa del estado
-      _montoCtrl.clear();
-      _notaCtrl.clear();
-
-      setState(() {
-        _canalSeleccionado = 'PedidosYa';
-        _canalCustom = null;
-        _metodoSeleccionado = 'Efectivo';
-        _pagoMixto = {};
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("✅ Venta Externa Registrada"),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
+      // Usar el Mixin para validar y registrar
+      final success = await validarYRegistrarVenta(
+        placeId: widget.placeId,
+        items: items,
+        total: montoTotal,
+        metodoSeleccionado: _metodoSeleccionado,
+        pagoMixto: _pagoMixto,
+        canal: _canalSeleccionado,
+        canalCustom: _canalCustom,
+        nota: nota,
       );
+
+      if (!mounted) return;
+
+      if (success) {
+        // Limpieza completa del estado
+        _montoCtrl.clear();
+        _notaCtrl.clear();
+
+        setState(() {
+          _canalSeleccionado = 'PedidosYa';
+          _canalCustom = null;
+          _metodoSeleccionado = 'Efectivo';
+          _pagoMixto = {};
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Venta Externa Registrada"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      // El manejo de errores ya está en el Mixin
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-    // El manejo de errores ya está en el Mixin
   }
 }

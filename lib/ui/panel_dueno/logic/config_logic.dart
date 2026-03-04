@@ -117,6 +117,17 @@ mixin ConfigLogicMixin<T extends StatefulWidget> on State<T> {
   Future<void> guardarDatosGenerales() async {
     try {
       final nombre = nombreController.text.trim();
+      if (nombre.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('El nombre del negocio no puede estar vacío'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
       await updateRealTime({
         'nombre': nombre,
         'name': nombre, // 👈 SAFETY CHECK: Guardamos ambos
@@ -211,9 +222,22 @@ mixin ConfigLogicMixin<T extends StatefulWidget> on State<T> {
   /// Guarda los costos de envío
   Future<void> guardarCostosEnvio() async {
     try {
+      final base = double.tryParse(envioBaseController.text.trim());
+      final kmExtra = double.tryParse(envioKmExtraController.text.trim());
+      if (base == null || kmExtra == null || base < 0 || kmExtra < 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ingresá valores válidos de costo (≥ 0)'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
       await updateRealTime({
-        'envioCostoBase': double.tryParse(envioBaseController.text) ?? 2000,
-        'envioCostoKmExtra': double.tryParse(envioKmExtraController.text) ?? 500,
+        'envioCostoBase': base,
+        'envioCostoKmExtra': kmExtra,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -277,7 +301,7 @@ mixin ConfigLogicMixin<T extends StatefulWidget> on State<T> {
           ),
         ],
       ),
-    );
+    ).then((_) => ctrl.dispose());
   }
 
   /// Muestra un selector de hora y guarda el valor
@@ -432,6 +456,9 @@ mixin ConfigLogicMixin<T extends StatefulWidget> on State<T> {
 
   /// Limpia los recursos del Mixin (debe llamarse desde dispose del State)
   void disposeConfigLogic() {
+    // Guard: si initConfigLogic nunca fue llamado (snapshot no llegó
+    // antes del dispose), los late final controllers no están inicializados.
+    if (!_dataLoaded) return;
     nombreController.dispose();
     direccionController.dispose();
     descripcionController.dispose();
