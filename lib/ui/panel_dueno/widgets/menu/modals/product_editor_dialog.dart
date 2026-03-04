@@ -390,13 +390,17 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
       finalCategory = _selectedCategory ?? '';
     }
 
+    // Validar precio
+    final double? precio = double.tryParse(_precioCtrl.text);
     if (_nombreCtrl.text.isEmpty ||
         _precioCtrl.text.isEmpty ||
+        precio == null ||
+        precio <= 0 ||
         finalCategory.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Faltan datos obligatorios (Nombre, Precio o Categoría)",
+            "Faltan datos obligatorios (Nombre, Precio válido o Categoría)",
           ),
         ),
       );
@@ -426,31 +430,55 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
         finalUrl = await ref.getDownloadURL();
       } catch (e) {
         debugPrint("Error subiendo foto: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Error al subir la imagen: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() => _uploading = false);
+        return;
       }
     }
 
-    final payload = {
-      "nombre": _nombreCtrl.text.trim(),
-      "descripcion": _descCtrl.text.trim(),
-      "categoria": finalCategory, // Usamos la variable calculada arriba
-      "precio": double.tryParse(_precioCtrl.text) ?? 0,
-      "fotoUrl": finalUrl,
-      "controlaStock": _controlaStock,
-      "stock": _controlaStock ? (int.tryParse(_stockCtrl.text) ?? 0) : 0,
-      "updatedAt": FieldValue.serverTimestamp(),
-    };
+    try {
+      final payload = {
+        "nombre": _nombreCtrl.text.trim(),
+        "descripcion": _descCtrl.text.trim(),
+        "categoria": finalCategory,
+        "precio": precio,
+        "fotoUrl": finalUrl,
+        "controlaStock": _controlaStock,
+        "stock": _controlaStock ? (int.tryParse(_stockCtrl.text) ?? 0) : 0,
+        "updatedAt": FieldValue.serverTimestamp(),
+      };
 
-    final ref = FirebaseFirestore.instance
-        .collection("places")
-        .doc(widget.placeId)
-        .collection("menu");
-    if (widget.docId == null) {
-      await ref.add(payload);
-    } else {
-      await ref.doc(widget.docId).update(payload);
+      final ref = FirebaseFirestore.instance
+          .collection("places")
+          .doc(widget.placeId)
+          .collection("menu");
+      if (widget.docId == null) {
+        await ref.add(payload);
+      } else {
+        await ref.doc(widget.docId).update(payload);
+      }
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      debugPrint("Error guardando producto: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al guardar: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
     }
-
-    if (mounted) Navigator.pop(context);
   }
 
   Widget _inputContainer(Widget child) {

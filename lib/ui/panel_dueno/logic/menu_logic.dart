@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import '../widgets/menu/modals/product_editor_dialog.dart';
 
@@ -50,12 +51,24 @@ mixin MenuLogicMixin<T extends StatefulWidget> on State<T> {
     );
 
     if (confirm == true && mounted) {
-      await FirebaseFirestore.instance
+      // Leer fotoUrl antes de borrar el documento para limpiar Storage
+      final docRef = FirebaseFirestore.instance
           .collection("places")
           .doc(placeId)
           .collection("menu")
-          .doc(docId)
-          .delete();
+          .doc(docId);
+      final snap = await docRef.get();
+      if (snap.exists) {
+        final fotoUrl = snap.data()?['fotoUrl'] as String?;
+        if (fotoUrl != null && fotoUrl.isNotEmpty) {
+          try {
+            await FirebaseStorage.instance.refFromURL(fotoUrl).delete();
+          } catch (_) {
+            // Si ya no existe en Storage, ignorar el error
+          }
+        }
+        await docRef.delete();
+      }
     }
   }
 

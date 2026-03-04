@@ -208,7 +208,7 @@ class MenuItemCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        "\$${data['precio']}",
+                        "\$${(data['precio'] as num?)?.toStringAsFixed(0) ?? '0'}",
                         style: TextStyle(
                           color: isEmpty ? Colors.white38 : Colors.greenAccent,
                           fontSize: 18,
@@ -323,7 +323,7 @@ class MenuItemCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              "\$${data['precio']}",
+              "\$${(data['precio'] as num?)?.toStringAsFixed(0) ?? '0'}",
               style: const TextStyle(
                 color: Colors.greenAccent,
                 fontSize: 16,

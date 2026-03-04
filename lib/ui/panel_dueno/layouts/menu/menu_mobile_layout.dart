@@ -61,6 +61,21 @@ class MenuMobileLayout extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: menuStream,
       builder: (context, snap) {
+        if (snap.hasError) {
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  "Error al cargar el menú: ${snap.error}",
+                  style: const TextStyle(color: Colors.redAccent),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+
         if (!snap.hasData) {
           return const SliverToBoxAdapter(
             child: Center(

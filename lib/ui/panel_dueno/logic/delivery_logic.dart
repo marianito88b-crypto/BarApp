@@ -312,7 +312,7 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
           'entregadoAt': FieldValue.serverTimestamp(),
         });
 
-        transaction.set(saleRef, {
+        final Map<String, dynamic> ventaPayload = {
           'fecha': FieldValue.serverTimestamp(),
           'total': totalFinal,
           'totalComida': totalComida,
@@ -327,7 +327,17 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
           ],
           'orderId': orderId,
           'cliente': data['clienteNombre'] ?? 'Cliente App',
-        });
+        };
+
+        // Incluir datos de descuento/cupón si los hay (para reportes)
+        if (data['descuentoAplicado'] != null) {
+          ventaPayload['descuentoAplicado'] = data['descuentoAplicado'];
+        }
+        if (data['codigoDescuento'] != null && (data['codigoDescuento'] as String).isNotEmpty) {
+          ventaPayload['codigoDescuento'] = data['codigoDescuento'];
+        }
+
+        transaction.set(saleRef, ventaPayload);
 
         return data;
       });
