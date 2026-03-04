@@ -17,8 +17,7 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = doc.data() as Map<String, dynamic>;
-    data['id'] = doc.id;
+    final data = {...doc.data() as Map<String, dynamic>, 'id': doc.id};
 
     final bool controlaStock = data['controlaStock'] ?? false;
     final int stock = PosUtils.safeInt(data['stock']);

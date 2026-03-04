@@ -5,7 +5,6 @@ import 'package:barapp/ui/panel_dueno/layouts/dashboard/dashboard_desktop_layout
 import 'package:barapp/ui/panel_dueno/layouts/dashboard/dashboard_mobile_layout.dart';
 import 'package:barapp/ui/panel_dueno/logic/dashboard_logic.dart';
 import 'package:barapp/ui/panel_dueno/widgets/dashboard/dashboard_filter_chip.dart';
-import 'package:barapp/services/dashboard/dashboard_metrics_service.dart';
 
 class DashboardMobile extends StatefulWidget {
   final String placeId;
@@ -101,8 +100,6 @@ class _DashboardMobileState extends State<DashboardMobile> with DashboardLogic {
         }
 
         final salesDocs = snapshot.data?.docs ?? [];
-
-        DashboardMetricsService.clearCache();
 
         return LayoutBuilder(
           builder: (context, constraints) {

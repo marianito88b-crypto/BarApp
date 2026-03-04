@@ -1,7 +1,7 @@
 import 'dart:ui';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:barapp/services/barpoints_service.dart';
 import 'package:barapp/ui/user/bar_points_detail_screen.dart';
 
 /// Tarjeta destacada de BarPoints con efecto glass y sombreado iluminado.
@@ -19,53 +19,57 @@ class BarPointsCard extends StatefulWidget {
 }
 
 class _BarPointsCardState extends State<BarPointsCard> {
-  int _barPoints = 0;
-  bool _isLoading = true;
+  late final Future<String?> _collectionFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadBarPoints();
+    final uid = widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
+    _collectionFuture =
+        uid != null ? _resolveCollection(uid) : Future.value(null);
   }
 
-  Future<void> _loadBarPoints() async {
-    final userId = widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) {
-      setState(() => _isLoading = false);
-      return;
-    }
-    try {
-      final points = await BarPointsService.obtenerBarPoints(userId);
-      if (mounted) {
-        setState(() {
-          _barPoints = points;
-          _isLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  /// Resuelve en qué colección está el usuario (usuarios o users).
+  Future<String?> _resolveCollection(String uid) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(uid)
+        .get();
+    return snap.exists ? 'usuarios' : 'users';
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const SizedBox.shrink();
-
     final uid = widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
 
+    return FutureBuilder<String?>(
+      future: _collectionFuture,
+      builder: (context, colSnap) {
+        final collection = colSnap.data;
+        if (collection == null) return const SizedBox.shrink();
+
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection(collection)
+              .doc(uid)
+              .snapshots(),
+          builder: (context, userSnap) {
+            final userData =
+                userSnap.data?.data() as Map<String, dynamic>?;
+            final totalPuntos =
+                (userData?['barPoints'] as num?)?.toInt() ?? 0;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: uid != null
-              ? () => Navigator.push(
+          onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => BarPointsDetailScreen(userId: uid),
                     ),
-                  )
-              : null,
+                  ),
           borderRadius: BorderRadius.circular(20),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
@@ -148,7 +152,7 @@ class _BarPointsCardState extends State<BarPointsCard> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "$_barPoints puntos",
+                            "$totalPuntos puntos",
                             style: const TextStyle(
                               color: Colors.orangeAccent,
                               fontSize: 26,
@@ -215,6 +219,10 @@ class _BarPointsCardState extends State<BarPointsCard> {
           ),
         ),
       ),
+    );
+          },
+        );
+      },
     );
   }
 }

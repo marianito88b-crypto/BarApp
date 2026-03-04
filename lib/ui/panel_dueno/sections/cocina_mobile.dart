@@ -12,18 +12,51 @@ class CocinaMobile extends StatefulWidget {
   State<CocinaMobile> createState() => _CocinaMobileState();
 }
 
-class _CocinaMobileState extends State<CocinaMobile> with KitchenLogicMixin {
+class _CocinaMobileState extends State<CocinaMobile> with KitchenLogicMixin, SingleTickerProviderStateMixin {
   @override
   String get placeId => widget.placeId;
+
+  late TabController _tabController;
+  late final Stream<QuerySnapshot> _pendientesStream;
+  late final Stream<QuerySnapshot> _historialStream;
 
   @override
   void initState() {
     super.initState();
     initKitchenLogic();
+    _tabController = TabController(length: 2, vsync: this);
+
+    _pendientesStream = FirebaseFirestore.instance
+        .collection("places")
+        .doc(widget.placeId)
+        .collection("orders")
+        .where('estado', whereIn: ['en_preparacion', 'pendiente', 'cancelado_por_mozo'])
+        .orderBy('createdAt', descending: false)
+        .snapshots();
+
+    const int horaCorte = 6;
+    final now = DateTime.now();
+    final DateTime startOfDay = now.hour < horaCorte
+        ? DateTime(now.year, now.month, now.day, horaCorte, 0, 0).subtract(const Duration(days: 1))
+        : DateTime(now.year, now.month, now.day, horaCorte, 0, 0);
+
+    _historialStream = FirebaseFirestore.instance
+        .collection("places")
+        .doc(widget.placeId)
+        .collection("orders")
+        .where('estado', whereIn: [
+          'listo', 'preparado', 'listo_para_retirar', 'entregado',
+          'cancelado_por_mozo', 'archivado',
+        ])
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+        .orderBy('createdAt', descending: true)
+        .limit(200)
+        .snapshots();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     disposeKitchenLogic();
     super.dispose();
   }
@@ -54,19 +87,53 @@ class _CocinaMobileState extends State<CocinaMobile> with KitchenLogicMixin {
         backgroundColor: const Color(0xFF1A1A1A),
         elevation: 0,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: KitchenStatusBar(placeId: widget.placeId),
+          preferredSize: const Size.fromHeight(94),
+          child: Column(
+            children: [
+              KitchenStatusBar(placeId: widget.placeId),
+              TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.orangeAccent,
+                labelColor: Colors.orangeAccent,
+                unselectedLabelColor: Colors.white54,
+                tabs: const [
+                  Tab(text: "Pendientes", icon: Icon(Icons.pending_actions, size: 18)),
+                  Tab(text: "Historial de Hoy", icon: Icon(Icons.history, size: 18)),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection("places")
-            .doc(widget.placeId)
-            .collection("orders")
-            .where('estado', whereIn: ['en_preparacion', 'pendiente'])
-            .orderBy('createdAt', descending: false)
-            .snapshots(),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildPendientesTab(),
+          _buildHistorialTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendientesTab() {
+    return StreamBuilder<QuerySnapshot>(
+        stream: _pendientesStream,
         builder: (context, snap) {
+          // Error handling (e.g. missing composite index)
+          if (snap.hasError) {
+            debugPrint('❌ Error pendientes stream: ${snap.error}');
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Error cargando comandas:\n${snap.error}',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
           // Estado de carga
           if (snap.connectionState == ConnectionState.waiting || !snap.hasData) {
             return _buildLoadingState();
@@ -82,7 +149,127 @@ class _CocinaMobileState extends State<CocinaMobile> with KitchenLogicMixin {
           // Estado con comandas - Grid responsivo
           return _buildComandasGrid(docs);
         },
-      ),
+      );
+  }
+
+  Widget _buildHistorialTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _historialStream,
+      builder: (context, snap) {
+        // Error handling (e.g. missing composite index)
+        if (snap.hasError) {
+          debugPrint('❌ Error historial stream: ${snap.error}');
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Error cargando historial:\n${snap.error}',
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+        if (!snap.hasData) {
+          return _buildLoadingState();
+        }
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.history, size: 60, color: Colors.grey[700]),
+                const SizedBox(height: 16),
+                Text(
+                  "Sin comandas en el historial de hoy",
+                  style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                ),
+              ],
+            ),
+          );
+        }
+        return _buildHistorialList(docs);
+      },
+    );
+  }
+
+  Widget _buildHistorialList(List<DocumentSnapshot> docs) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: docs.length,
+      itemBuilder: (context, i) {
+        final doc = docs[i];
+        final data = doc.data() as Map<String, dynamic>;
+        final items = List<Map<String, dynamic>>.from(data['items'] ?? []);
+        final estado = data['estado'] ?? '';
+        final bool cancelado = estado == 'cancelado_por_mozo' || estado == 'archivado';
+        final Timestamp? ts = data['createdAt'] ?? data['timestamp'];
+        final String hora = ts != null
+            ? '${ts.toDate().hour.toString().padLeft(2, '0')}:${ts.toDate().minute.toString().padLeft(2, '0')}'
+            : '--:--';
+        final ident = data['mesaNombre'] ?? data['clienteNombre'] ?? 'Anónimo';
+        final estadoLabel = cancelado ? 'CANCELADO' : (estado == 'entregado' ? 'ENTREGADO' : 'DESPACHADO');
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          color: const Color(0xFF1E1E1E),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "$ident · $hora",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: cancelado
+                            ? Colors.redAccent.withValues(alpha: 0.3)
+                            : Colors.greenAccent.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        estadoLabel,
+                        style: TextStyle(
+                          color: cancelado ? Colors.redAccent : Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ...items.take(5).map((item) => Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 2),
+                      child: Text(
+                        "${item['cantidad']}x ${item['nombre']}",
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    )),
+                if (items.length > 5)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      "+ ${items.length - 5} más",
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

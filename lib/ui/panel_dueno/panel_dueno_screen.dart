@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 
 // --- IMPORTS ---
@@ -20,8 +19,7 @@ import 'package:barapp/ui/panel_dueno/pos/control_caja_screen.dart';
 import 'sections/gastos_mobile.dart';
 import 'package:barapp/ui/panel_dueno/sections/qr_generator_mobile.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:barapp/ui//ventas_externas/ventas_externas_screen.dart';
-// import 'sections/qr_generator_mobile.dart'; // (Duplicado, borré uno para limpiar)
+import 'package:barapp/ui/ventas_externas/ventas_externas_screen.dart';
 
 class PanelDuenoScreen extends StatefulWidget {
   final String placeId;
@@ -38,8 +36,13 @@ class _PanelDuenoScreenState extends State<PanelDuenoScreen>
 
   bool _trialSnackShown = false;
 
+  List<NavItem>? _cachedNavItems;
+  String? _cachedRole;
+
+  late final Stream<DocumentSnapshot> _placesStream;
+
   @override
-  List<NavItem> getNavItemsForCurrentRole() => _getNavItemsForRole(_userRole);
+  List<NavItem> getNavItemsForCurrentRole() => _getCachedNavItems();
 
   @override
   void setCurrentNavIndex(int index) => setState(() => _currentIndex = index);
@@ -47,6 +50,10 @@ class _PanelDuenoScreenState extends State<PanelDuenoScreen>
   @override
   void initState() {
     super.initState();
+    _placesStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
     _checkContextualRole();
     initPanelDuenoAudioAndListener();
   }
@@ -204,11 +211,7 @@ class _PanelDuenoScreenState extends State<PanelDuenoScreen>
 
     // 🔥 ENVOLVEMOS TODO EN EL STREAM DEL LUGAR
     return StreamBuilder<DocumentSnapshot>(
-      stream:
-          FirebaseFirestore.instance
-              .collection('places')
-              .doc(widget.placeId)
-              .snapshots(),
+      stream: _placesStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Scaffold(
@@ -257,7 +260,7 @@ class _PanelDuenoScreenState extends State<PanelDuenoScreen>
         // 🧮 CALCULAMOS PERMISOS EN TIEMPO REAL
         final int daysLeft = daysRemaining(placeData);
 
-        final navItems = _getNavItemsForRole(_userRole);
+        final navItems = _getCachedNavItems();
         if (_currentIndex >= navItems.length) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) setState(() => _currentIndex = 0);
@@ -319,6 +322,14 @@ class _PanelDuenoScreenState extends State<PanelDuenoScreen>
   }
 
   // --- HELPERS Y CONFIGURACIÓN DE ROLES ---
+  List<NavItem> _getCachedNavItems() {
+    if (_cachedNavItems == null || _cachedRole != _userRole) {
+      _cachedRole = _userRole;
+      _cachedNavItems = _getNavItemsForRole(_userRole);
+    }
+    return _cachedNavItems!;
+  }
+
   List<NavItem> _getNavItemsForRole(String role) {
     final String currentUserEmail =
         FirebaseAuth.instance.currentUser?.email ?? 'sin-email@local.com';

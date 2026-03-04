@@ -2,16 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 // Asegurate de tener intl en pubspec.yaml o usa formanteo manual
 
-class PlaceDetailAdminScreen extends StatelessWidget {
+class PlaceDetailAdminScreen extends StatefulWidget {
   final String placeId;
 
   const PlaceDetailAdminScreen({super.key, required this.placeId});
 
   @override
+  State<PlaceDetailAdminScreen> createState() => _PlaceDetailAdminScreenState();
+}
+
+class _PlaceDetailAdminScreenState extends State<PlaceDetailAdminScreen> {
+  late final Stream<DocumentSnapshot> _placeStream;
+  late final Stream<QuerySnapshot> _staffStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placeStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+    _staffStream = FirebaseFirestore.instance
+        .collection('usuarios')
+        .where('placeId', isEqualTo: widget.placeId)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Usamos StreamBuilder aquí para que CUALQUIER cambio (pago, dueño) se vea INSTANTÁNEO
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('places').doc(placeId).snapshots(),
+      stream: _placeStream,
       builder: (context, snap) {
         if (!snap.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
         
@@ -141,7 +162,7 @@ class PlaceDetailAdminScreen extends StatelessWidget {
 
                 // === STAFF ===
                 _buildSectionTitle('Staff'),
-                _buildStaffList(placeId),
+                _buildStaffList(widget.placeId),
               ],
             ),
           ),
@@ -216,7 +237,7 @@ class PlaceDetailAdminScreen extends StatelessWidget {
   
   Widget _buildStaffList(String placeId) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('usuarios').where('placeId', isEqualTo: placeId).snapshots(),
+      stream: _staffStream,
       builder: (context, snap) {
         if (!snap.hasData) return const SizedBox();
         final staff = snap.data!.docs;
@@ -256,7 +277,7 @@ class PlaceDetailAdminScreen extends StatelessWidget {
     DateTime baseDate = currentExpiration.isBefore(DateTime.now()) ? DateTime.now() : currentExpiration;
     DateTime newDate = baseDate.add(const Duration(days: 30));
 
-    await FirebaseFirestore.instance.collection('places').doc(placeId).update({
+    await FirebaseFirestore.instance.collection('places').doc(widget.placeId).update({
       'validUntil': Timestamp.fromDate(newDate),
     });
     
@@ -266,7 +287,7 @@ class PlaceDetailAdminScreen extends StatelessWidget {
   }
 
   Future<void> _startTrial(BuildContext context) async {
-    await FirebaseFirestore.instance.collection('places').doc(placeId).update({
+    await FirebaseFirestore.instance.collection('places').doc(widget.placeId).update({
       'fechaInicioPrueba': FieldValue.serverTimestamp(),
     });
   }
@@ -285,7 +306,7 @@ class PlaceDetailAdminScreen extends StatelessWidget {
           maxChildSize: 0.95,
           expand: false,
           builder: (context, scrollController) {
-            return _UserSearchSheet(placeId: placeId, scrollController: scrollController);
+            return _UserSearchSheet(placeId: widget.placeId, scrollController: scrollController);
           },
         );
       }
@@ -306,6 +327,13 @@ class _UserSearchSheet extends StatefulWidget {
 
 class _UserSearchSheetState extends State<_UserSearchSheet> {
   String _searchQuery = '';
+  late final Stream<QuerySnapshot> _usersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersStream = FirebaseFirestore.instance.collection('usuarios').limit(100).snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -328,7 +356,7 @@ class _UserSearchSheetState extends State<_UserSearchSheet> {
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('usuarios').limit(100).snapshots(),
+            stream: _usersStream,
             builder: (context, snap) {
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final allDocs = snap.data!.docs;

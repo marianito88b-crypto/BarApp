@@ -11,13 +11,39 @@ import 'package:barapp/ui/auth/login_screen.dart';
 import 'package:barapp/ui/home_shell.dart'; 
 import 'package:barapp/ui/auth/terms_screen.dart'; // <--- IMPORTA LA NUEVA PANTALLA AQUÍ
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Stream<User?> _authStream;
+  Stream<DocumentSnapshot>? _userDocStream;
+  String? _cachedUid;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStream = FirebaseAuth.instance.authStateChanges();
+  }
+
+  Stream<DocumentSnapshot> _getUserDocStream(String uid) {
+    if (_cachedUid != uid) {
+      _cachedUid = uid;
+      _userDocStream = FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(uid)
+          .snapshots();
+    }
+    return _userDocStream!;
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: _authStream,
       builder: (context, snap) {
         // 1. Cargando estado de autenticación
         if (snap.connectionState == ConnectionState.waiting) {
@@ -36,10 +62,7 @@ class AuthGate extends StatelessWidget {
         // 3. Si HAY usuario → Verificamos TÉRMINOS Y CONDICIONES
         // Usamos un StreamBuilder de Firestore para detectar al instante si acepta
         return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(user.uid)
-              .snapshots(),
+          stream: _getUserDocStream(user.uid),
           builder: (context, userSnap) {
             
             // Esperando a leer la base de datos...

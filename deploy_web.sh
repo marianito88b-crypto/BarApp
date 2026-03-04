@@ -7,43 +7,57 @@
 
 set -e
 
+# Colores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# 0. Validar dart_defines.json
 if [ ! -f "dart_defines.json" ]; then
-  echo "⚠️  Crea dart_defines.json (copia dart_defines.json.example y rellena las claves)"
+  echo -e "${RED}⚠️  Falta dart_defines.json${NC}"
+  echo "Copia dart_defines.json.example y rellena las claves."
   exit 1
 fi
 
-echo "🧹 [1/6] Limpiando proyecto..."
-flutter clean
+# Validar que las claves no estén vacías
+if ! grep -q '"FIREBASE_WEB_API_KEY"' dart_defines.json || \
+   grep -q '"FIREBASE_WEB_API_KEY": ""' dart_defines.json; then
+  echo -e "${RED}⚠️  FIREBASE_WEB_API_KEY vacío o ausente en dart_defines.json${NC}"
+  exit 1
+fi
+
+echo -e "${YELLOW}🧹 [1/5] Limpiando build anterior...${NC}"
+rm -rf build/web
 
 echo ""
-echo "📦 [2/6] Obteniendo dependencias..."
+echo -e "${YELLOW}📦 [2/5] Obteniendo dependencias...${NC}"
 flutter pub get
 
 echo ""
-echo "🏗️  [3/6] Compilando para web (con dart_defines.json)..."
-flutter build web --release --no-tree-shake-icons --dart-define-from-file=dart_defines.json
+echo -e "${YELLOW}🏗️  [3/5] Compilando para web (release + dart_defines)...${NC}"
+flutter build web --release \
+  --dart-define-from-file=dart_defines.json \
+  --no-wasm-dry-run
 
-echo ""
-echo "🗺️  [4/6] Inyectando clave de Google Maps..."
-bash tool/inject_maps_key.sh
-
-echo ""
-echo "🗑️  [5/6] Eliminando flutter_service_worker.js para evitar error 206..."
-SW_PATH="build/web/flutter_service_worker.js"
-if [ -f "$SW_PATH" ]; then
-  rm -f "$SW_PATH"
-  echo "   ✓ flutter_service_worker.js eliminado"
-else
-  echo "   ⚠ No encontrado (puede estar en otra ruta en tu versión de Flutter)"
+# Validar que el build generó los archivos
+if [ ! -f "build/web/main.dart.js" ]; then
+  echo -e "${RED}❌ Build falló: build/web/main.dart.js no existe${NC}"
+  exit 1
 fi
 
 echo ""
-echo "🚀 [6/6] Desplegando a Firebase Hosting..."
+echo -e "${YELLOW}🔍 [4/5] Verificando build...${NC}"
+FILE_COUNT=$(find build/web -type f | wc -l | tr -d ' ')
+JS_SIZE=$(du -sh build/web/main.dart.js | awk '{print $1}')
+echo -e "   ${GREEN}✓${NC} Archivos generados: $FILE_COUNT"
+echo -e "   ${GREEN}✓${NC} main.dart.js: $JS_SIZE"
+
+echo ""
+echo -e "${YELLOW}🚀 [5/5] Desplegando a Firebase Hosting...${NC}"
 firebase deploy --only hosting
 
 echo ""
-echo "✅ ¡Despliegue completado!"
-echo ""
-echo "Nota: La app funcionará sin Service Worker (sin caché offline)."
-echo "      Esto evita el error 206 en actualizaciones."
+echo -e "${GREEN}✅ Deploy exitoso!${NC}"
+echo -e "   URL: https://barapp-social.web.app"
 echo ""

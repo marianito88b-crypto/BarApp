@@ -19,6 +19,19 @@ class _CouponManagerScreenState extends State<CouponManagerScreen> {
   bool _usoUnicoGlobal = true; // true = un solo uso en toda la app, false = un solo uso por bar
   final Set<String> _baresSeleccionados = {};
   bool _isLoading = false;
+  late final Stream<QuerySnapshot> _placesStream;
+  late final Stream<QuerySnapshot> _cuponesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placesStream = FirebaseFirestore.instance.collection('places').snapshots();
+    _cuponesStream = FirebaseFirestore.instance
+        .collection('cupones_maestros')
+        .where('activo', isEqualTo: true)
+        .orderBy('creadoEn', descending: true)
+        .snapshots();
+  }
 
   @override
   void dispose() {
@@ -280,7 +293,7 @@ class _CouponManagerScreenState extends State<CouponManagerScreen> {
                     ),
                     const SizedBox(height: 8),
                     StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('places').snapshots(),
+                      stream: _placesStream,
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) {
                           return const CircularProgressIndicator();
@@ -384,11 +397,7 @@ class _CouponManagerScreenState extends State<CouponManagerScreen> {
         ),
         const SizedBox(height: 16),
         StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('cupones_maestros')
-              .where('activo', isEqualTo: true)
-              .orderBy('creadoEn', descending: true)
-              .snapshots(),
+          stream: _cuponesStream,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());

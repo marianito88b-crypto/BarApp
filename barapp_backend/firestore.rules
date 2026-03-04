@@ -77,7 +77,10 @@ service cloud.firestore {
       // Los CRÉDITOS (monto > 0) solo los escribe la Cloud Function onOrderDelivered (Admin SDK).
       match /historial_puntos/{movId} {
         allow read: if isOwner(userId) || isSuperAdmin();
-        allow create: if isOwner(userId) && (request.resource.data.get('monto', 0) <= 0);
+        // máx débito posible = -500 (cap total de BarPoints); evita spam de logs falsos
+        allow create: if isOwner(userId)
+            && request.resource.data.get('monto', 0) <= 0
+            && request.resource.data.get('monto', 0) >= -500;
         allow update, delete: if false;
       }
     }
@@ -134,7 +137,10 @@ service cloud.firestore {
       // Historial de BarPoints (legacy): mismo criterio que usuarios
       match /historial_puntos/{movId} {
         allow read: if isOwner(userId) || isSuperAdmin();
-        allow create: if isOwner(userId) && (request.resource.data.get('monto', 0) <= 0);
+        // máx débito posible = -500 (cap total de BarPoints); evita spam de logs falsos
+        allow create: if isOwner(userId)
+            && request.resource.data.get('monto', 0) <= 0
+            && request.resource.data.get('monto', 0) >= -500;
         allow update, delete: if false;
       }
     }
@@ -164,8 +170,6 @@ service cloud.firestore {
       }
 
       // Subcolecciones explícitas (sin wildcard /{document=**})
-      // Cada subcollection tiene reglas específicas para control granular.
-
       match /mesas/{mesaId} {
         allow read, write: if isLoggedIn();
 
@@ -175,8 +179,7 @@ service cloud.firestore {
       }
 
       match /ventas/{ventaId} {
-        allow read: if isLoggedIn();
-        allow write: if isLoggedIn();
+        allow read, write: if isLoggedIn();
       }
 
       match /gastos/{gastoId} {

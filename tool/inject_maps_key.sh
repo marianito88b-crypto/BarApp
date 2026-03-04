@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Inyecta la clave de Google Maps en build/web/index.html (solo el output de build).
-# NO modifica web/index.html (fuente). El placeholder __GOOGLE_MAPS_API_KEY__
-# se reemplaza únicamente en build/web/index.html durante deploy.
-# Lee desde dart_defines.json o variable de entorno GOOGLE_MAPS_API_KEY.
+# DEPRECADO: La clave de Google Maps se inyecta dinámicamente desde main.dart
+# (EnvironmentConfig + maps_script_loader_web). Ya no se usa este script en deploy.
+#
+# Histórico: Reemplazaba __GOOGLE_MAPS_API_KEY__ en build/web/index.html.
 set -e
 
 MAPS_KEY="${GOOGLE_MAPS_API_KEY:-}"

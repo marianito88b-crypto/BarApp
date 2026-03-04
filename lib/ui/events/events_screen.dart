@@ -15,10 +15,16 @@ class EventsScreen extends StatefulWidget {
 
 class _EventsScreenState extends State<EventsScreen> {
   bool _isSuperAdmin = false;
+  late final Stream<QuerySnapshot> _eventsStream;
 
   @override
   void initState() {
     super.initState();
+    _eventsStream = FirebaseFirestore.instance
+        .collection('events')
+        .where('date', isGreaterThanOrEqualTo: DateTime.now().subtract(const Duration(hours: 12)))
+        .orderBy('date', descending: false)
+        .snapshots();
     _checkSuperAdminRole();
   }
 
@@ -92,11 +98,7 @@ class _EventsScreenState extends State<EventsScreen> {
             )
           : null,
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('events')
-            .where('date', isGreaterThanOrEqualTo: DateTime.now().subtract(const Duration(hours: 12))) // Mostramos eventos de hoy aunque hayan empezado
-            .orderBy('date', descending: false)
-            .snapshots(),
+        stream: _eventsStream,
         builder: (context, snap) {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: Colors.orangeAccent));
           

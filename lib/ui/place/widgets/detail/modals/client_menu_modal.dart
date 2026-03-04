@@ -215,18 +215,31 @@ class ClientMenuModal {
 }
 
 /// Botón para ver la carta completa (PDF o imagen)
-class _FullMenuButton extends StatelessWidget {
+class _FullMenuButton extends StatefulWidget {
   final String placeId;
 
   const _FullMenuButton({required this.placeId});
 
   @override
+  State<_FullMenuButton> createState() => _FullMenuButtonState();
+}
+
+class _FullMenuButtonState extends State<_FullMenuButton> {
+  late final Stream<DocumentSnapshot> _placeStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placeStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .snapshots(),
+      stream: _placeStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
         final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};

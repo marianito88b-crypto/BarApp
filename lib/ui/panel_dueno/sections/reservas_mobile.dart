@@ -1,4 +1,3 @@
-// ignore_for_file: use_build_context_synchronously, dead_code
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -21,12 +20,28 @@ class _ReservasMobileState extends State<ReservasMobile>
   String _filtro =
       "pendiente"; // Valores: 'pendiente', 'confirmada', 'en_curso', 'rechazada', 'no_asistio', 'todas'
 
+  // 🔥 FIX: Cachear stream para no recrear listener en cada rebuild
+  late Stream<QuerySnapshot> _reservasStream;
+
   @override
   String get placeId => widget.placeId;
+
+  void _initReservasStream() {
+    final now = DateTime.now();
+    final inicioHoy = DateTime(now.year, now.month, now.day);
+    _reservasStream = FirebaseFirestore.instance
+        .collection("places")
+        .doc(widget.placeId)
+        .collection("reservas")
+        .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(inicioHoy))
+        .orderBy('fecha', descending: false)
+        .snapshots();
+  }
 
   @override
   void initState() {
     super.initState();
+    _initReservasStream();
     // Configurar callback para cambiar filtro desde alertas
     onFiltroChanged = (filtro) {
       setState(() => _filtro = filtro);
@@ -63,9 +78,9 @@ class _ReservasMobileState extends State<ReservasMobile>
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       floatingActionButton: FloatingActionButton(
+        heroTag: "fab_reservas_mobile",
         backgroundColor: Colors.orangeAccent,
         child: const Icon(Icons.add, color: Colors.black),
-        
         onPressed: () => _mostrarCrearEditar(context),
       ),
       body: Column(
@@ -103,7 +118,7 @@ class _ReservasMobileState extends State<ReservasMobile>
           // Lista
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: _streamReservas(),
+              stream: _reservasStream,
               builder: (context, snap) {
                 if (snap.hasError) {
                   return const Center(
@@ -294,7 +309,7 @@ class _ReservasMobileState extends State<ReservasMobile>
               border: Border.all(color: Colors.white10),
             ),
             child: StreamBuilder<QuerySnapshot>(
-              stream: _streamReservas(),
+              stream: _reservasStream,
               builder: (context, snap) {
                 if (!snap.hasData) {
                   return const Center(
@@ -526,21 +541,6 @@ class _ReservasMobileState extends State<ReservasMobile>
   // ⚙️ LÓGICA CRUD + STREAMS
   // ===========================================================================
 
- Stream<QuerySnapshot> _streamReservas() {
-  // 1. Definimos el punto de corte (hoy a las 00:00:00)
-  final now = DateTime.now();
-  final inicioHoy = DateTime(now.year, now.month, now.day);
-
-  return FirebaseFirestore.instance
-      .collection("places")
-      .doc(widget.placeId)
-      .collection("reservas")
-      // 2. Filtramos en el servidor: solo lo de hoy en adelante
-      .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(inicioHoy))
-      .orderBy('fecha', descending: false)
-      .snapshots();
-}
-
 List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
   if (_filtro == "todas" || _filtro == "hoy") return docs; 
   // 'hoy' ya viene implícito en el stream ahora
@@ -568,8 +568,8 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
           .get();
 
       final mesasNombres = mesasIds.map((id) {
-        final doc = mesasSnap.docs.firstWhere((d) => d.id == id);
-        return doc.data()['nombre'] ?? 'Mesa';
+        final doc = mesasSnap.docs.where((d) => d.id == id).firstOrNull;
+        return doc?.data()['nombre']?.toString() ?? 'Mesa';
       }).toList();
 
       final batch = FirebaseFirestore.instance.batch();
@@ -658,56 +658,67 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
 
     if (confirm != true) return;
 
-    final batch = FirebaseFirestore.instance.batch();
-    batch.delete(
-      FirebaseFirestore.instance
-          .collection("places")
-          .doc(widget.placeId)
-          .collection("reservas")
-          .doc(id),
-    );
-
-    // Liberar mesa(s) y limpiar cliente - Soporta múltiples mesas
-    final mesaId = data['mesaId'];
-    List<String> mesasIds = [];
-
-    if (mesaId != null) {
-      if (mesaId is List) {
-        mesasIds = List<String>.from(mesaId);
-      } else {
-        mesasIds = [mesaId.toString()];
-      }
-
-      // Liberar todas las mesas asociadas
-      for (final mesaIdStr in mesasIds) {
-        final mesaRef = FirebaseFirestore.instance
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      batch.delete(
+        FirebaseFirestore.instance
             .collection("places")
             .doc(widget.placeId)
-            .collection("mesas")
-            .doc(mesaIdStr);
+            .collection("reservas")
+            .doc(id),
+      );
 
-        final mesaSnap = await mesaRef.get();
-        final reservaActiva = mesaSnap.data()?['reservaIdActiva'];
+      // Liberar mesa(s) y limpiar cliente - Soporta múltiples mesas
+      final mesaId = data['mesaId'];
+      List<String> mesasIds = [];
 
-        // 🔒 Liberar SOLO si corresponde
-        if (reservaActiva == id) {
-          batch.update(mesaRef, {
-            "estado": "libre",
-            "clienteActivo": FieldValue.delete(),
-            "reservaIdActiva": FieldValue.delete(),
-          });
+      if (mesaId != null) {
+        if (mesaId is List) {
+          mesasIds = List<String>.from(mesaId);
+        } else {
+          mesasIds = [mesaId.toString()];
         }
-      }
-    }
 
-    await batch.commit();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Reserva eliminada"),
-        backgroundColor: Colors.red,
-      ),
-    );
+        // Liberar todas las mesas asociadas (en paralelo)
+        final futures = mesasIds.map((mesaIdStr) async {
+          final mesaRef = FirebaseFirestore.instance
+              .collection("places")
+              .doc(widget.placeId)
+              .collection("mesas")
+              .doc(mesaIdStr);
+
+          final mesaSnap = await mesaRef.get();
+          final reservaActiva = mesaSnap.data()?['reservaIdActiva'];
+
+          // 🔒 Liberar SOLO si corresponde
+          if (reservaActiva == id) {
+            batch.update(mesaRef, {
+              "estado": "libre",
+              "clienteActivo": FieldValue.delete(),
+              "reservaIdActiva": FieldValue.delete(),
+            });
+          }
+        });
+        await Future.wait(futures);
+      }
+
+      await batch.commit();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Reserva eliminada"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error al eliminar reserva: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
  Future<void> _mostrarCrearEditar(
@@ -792,14 +803,14 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
 
   if (!mounted) return;
 
+  // 🔥 FIX CRÍTICO: Variable fuera del builder para que no se resetee en cada rebuild
+  bool cargando = false;
+
  showDialog(
   context: context,
   barrierDismissible: false, // 🔒 Evita que cierren el diálogo mientras guarda
   builder: (ctx) => StatefulBuilder(
     builder: (context, setDialogState) {
-      // 1. Definimos la variable de estado dentro del Dialog
-      bool cargando = false; 
-
       return AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
         title: Text(

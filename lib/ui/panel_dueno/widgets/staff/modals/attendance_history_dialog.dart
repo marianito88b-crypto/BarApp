@@ -48,6 +48,13 @@ class _AttendanceHistoryDialogState extends State<AttendanceHistoryDialog> with 
   
   bool _isExporting = false;
   bool _isCleaning = false;
+  late final Stream<QuerySnapshot> _asistenciasStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _asistenciasStream = getAsistenciasStream(widget.uidStaff);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +117,7 @@ class _AttendanceHistoryDialogState extends State<AttendanceHistoryDialog> with 
         width: 500,
         height: 500,
         child: StreamBuilder<QuerySnapshot>(
-          stream: getAsistenciasStream(widget.uidStaff),
+          stream: _asistenciasStream,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(

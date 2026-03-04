@@ -23,6 +23,8 @@ class TomaPedidoDesktopLayout extends StatelessWidget {
   final VoidCallback onImprimirCuentaCliente;
   final VoidCallback onCobrarCuenta;
   final VoidCallback onLiberarMesa;
+  final Stream<QuerySnapshot> menuStream;
+  final Stream<DocumentSnapshot> mesaStream;
 
   const TomaPedidoDesktopLayout({
     super.key,
@@ -43,6 +45,8 @@ class TomaPedidoDesktopLayout extends StatelessWidget {
     required this.onImprimirCuentaCliente,
     required this.onCobrarCuenta,
     required this.onLiberarMesa,
+    required this.menuStream,
+    required this.mesaStream,
   });
 
   @override
@@ -122,12 +126,7 @@ class TomaPedidoDesktopLayout extends StatelessWidget {
 
   Widget _buildProductList(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('menu')
-          .orderBy('categoria')
-          .snapshots(),
+      stream: menuStream,
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(
@@ -164,8 +163,7 @@ class TomaPedidoDesktopLayout extends StatelessWidget {
             itemCount: docs.length,
             itemBuilder: (_, i) {
               final doc = docs[i];
-              final data = doc.data() as Map<String, dynamic>;
-              data['id'] = doc.id;
+              final data = {...doc.data() as Map<String, dynamic>, 'id': doc.id};
               return ProductCard(
                 doc: doc,
                 isGrid: true,
@@ -215,8 +213,7 @@ class TomaPedidoDesktopLayout extends StatelessWidget {
                   delegate: SliverChildBuilderDelegate(
                     (ctx, i) {
                       final doc = groupedMenu[category]![i];
-                      final data = doc.data() as Map<String, dynamic>;
-                      data['id'] = doc.id;
+                      final data = {...doc.data() as Map<String, dynamic>, 'id': doc.id};
                       return ProductCard(
                         doc: doc,
                         isGrid: true,
@@ -255,6 +252,7 @@ class TomaPedidoDesktopLayout extends StatelessWidget {
       pedidoHistorico: pedidoHistorico,
       totalGeneral: totalGeneral,
       guardando: guardando,
+      mesaStream: mesaStream,
       onRestarProducto: onRestarProducto,
       onEliminarItemHistorico: onEliminarItemHistorico,
       onMarcharPedido: onMarcharPedido,

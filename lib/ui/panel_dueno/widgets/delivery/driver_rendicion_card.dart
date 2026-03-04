@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 /// Tarjeta que muestra la rendición de un chofer (repartidor)
 /// 
 /// Calcula y muestra los viajes realizados hoy y el monto total a pagar
-class DriverRendicionCard extends StatelessWidget {
+class DriverRendicionCard extends StatefulWidget {
   final String placeId;
   final QueryDocumentSnapshot driverDoc;
 
@@ -16,29 +16,44 @@ class DriverRendicionCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final choferData = driverDoc.data() as Map<String, dynamic>;
-    final String emailChofer = choferData['email'] ?? '';
-    final String nombreMostrado = choferData['nombre'] ?? emailChofer;
+  State<DriverRendicionCard> createState() => _DriverRendicionCardState();
+}
+
+class _DriverRendicionCardState extends State<DriverRendicionCard> {
+  late final Stream<QuerySnapshot> _stream;
+  late final String _emailChofer;
+  late final String _nombreMostrado;
+
+  @override
+  void initState() {
+    super.initState();
+    final choferData = widget.driverDoc.data() as Map<String, dynamic>;
+    _emailChofer = choferData['email'] ?? '';
+    _nombreMostrado = choferData['nombre'] ?? _emailChofer;
 
     // Ajuste de fecha: Buscamos desde las 00:00 de hoy
     final now = DateTime.now();
     final inicioHoy = DateTime(now.year, now.month, now.day);
 
+    _stream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('ventas')
+        .where('repartidor', isEqualTo: _emailChofer)
+        .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(inicioHoy))
+        .snapshots();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('ventas')
-          .where('repartidor', isEqualTo: emailChofer)
-          .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(inicioHoy))
-          .snapshots(),
+      stream: _stream,
       builder: (context, vSnap) {
         // Manejo de errores con logs claros
         if (vSnap.hasError) {
           final error = vSnap.error.toString();
           debugPrint("🔥 ERROR FIRESTORE en Rendición:");
-          debugPrint("   Chofer: $emailChofer");
+          debugPrint("   Chofer: $_emailChofer");
           debugPrint("   Error: $error");
           
           // Detectar si es error de índice faltante
@@ -130,7 +145,7 @@ class DriverRendicionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      nombreMostrado,
+                      _nombreMostrado,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

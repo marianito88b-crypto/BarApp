@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:barapp/services/printer/printer_service.dart';
+import 'package:barapp/services/dashboard/dashboard_metrics_service.dart';
 import 'package:barapp/ui/panel_dueno/sections/dashboard_mobile.dart';
 
 /// Mixin con la lógica de tiempos, notificaciones y auto-impresión del dashboard.
@@ -20,6 +21,7 @@ mixin DashboardLogic on State<DashboardMobile> {
   StreamSubscription? _reservaPrintSub;
   StreamSubscription? _comandaPrintSub;
   StreamSubscription? _pedidoWebPrintSub;
+  StreamSubscription? _salesCacheSub;
 
   Set<String> _knownReservasIds = {};
   Set<String> _knownPedidosIds = {};
@@ -63,6 +65,7 @@ mixin DashboardLogic on State<DashboardMobile> {
     _reservaPrintSub?.cancel();
     _comandaPrintSub?.cancel();
     _pedidoWebPrintSub?.cancel();
+    _salesCacheSub?.cancel();
     _audioPlayer.dispose();
   }
 
@@ -95,6 +98,7 @@ mixin DashboardLogic on State<DashboardMobile> {
   }
 
   void initSalesStream() {
+    _salesCacheSub?.cancel();
     _salesStream = FirebaseFirestore.instance
         .collection("places")
         .doc(widget.placeId)
@@ -106,6 +110,9 @@ mixin DashboardLogic on State<DashboardMobile> {
         .where("fecha", isLessThanOrEqualTo: Timestamp.fromDate(_endOfDay))
         .orderBy("fecha", descending: true)
         .snapshots();
+    _salesCacheSub = _salesStream.listen((_) {
+      DashboardMetricsService.clearCache();
+    });
   }
 
   void startShiftResetTimer() {
@@ -166,13 +173,12 @@ mixin DashboardLogic on State<DashboardMobile> {
         Colors.greenAccent,
       );
       _knownPedidosIds = snap.docs.map((d) => d.id).toSet();
+    });
 
-      if (_isFirstLoad) {
-        Future.delayed(
-          const Duration(seconds: 2),
-          () => _isFirstLoad = false,
-        );
-      }
+    // Garantiza que _isFirstLoad se libere después de 3 segundos,
+    // independientemente de si los streams emiten (p.ej. bar sin pedidos online).
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) _isFirstLoad = false;
     });
   }
 
@@ -241,9 +247,29 @@ mixin DashboardLogic on State<DashboardMobile> {
 
               if (data != null && data['impreso'] != true) {
                 try {
-                  _playAlertSound();
-                  await PrinterService().printComanda(data);
-                  await change.doc.reference.update({'impreso': true});
+                  // Transacción: reclamar impresión atómicamente para evitar duplicados
+                  final claimed = await FirebaseFirestore.instance.runTransaction<bool>((transaction) async {
+                    final freshDoc = await transaction.get(change.doc.reference);
+                    if (freshDoc.exists && freshDoc.data()?['impreso'] != true) {
+                      transaction.update(change.doc.reference, {'impreso': true});
+                      return true;
+                    }
+                    return false;
+                  });
+
+                  if (claimed) {
+                    _playAlertSound();
+                    // Impresión separada del claim: si falla, revertimos el flag
+                    // para que el próximo ciclo del stream lo intente de nuevo.
+                    try {
+                      await PrinterService().printComanda(data);
+                    } catch (printErr) {
+                      debugPrint("❌ Error imprimiendo comanda: $printErr");
+                      try {
+                        await change.doc.reference.update({'impreso': false});
+                      } catch (_) {}
+                    }
+                  }
                 } catch (e) {
                   debugPrint("❌ Error en Auto-Print Comandas: $e");
                 }
@@ -268,16 +294,39 @@ mixin DashboardLogic on State<DashboardMobile> {
               final data = change.doc.data();
 
               if (data != null && data['impreso'] != true) {
-                await PrinterService().printTicket({
-                  'tipoTicket': 'RESERVA',
-                  'cliente': data['cliente'],
-                  'mesaNombre': data['mesaNombre'] ?? 'A DEFINIR',
-                  'fechaReserva': data['fecha'],
-                  'personas': data['personas'] ?? 0,
-                  'total': (data['costoReserva'] ?? 0).toDouble(),
-                });
+                try {
+                  // Transacción: reclamar impresión atómicamente
+                  final claimed = await FirebaseFirestore.instance.runTransaction<bool>((transaction) async {
+                    final freshDoc = await transaction.get(change.doc.reference);
+                    if (freshDoc.exists && freshDoc.data()?['impreso'] != true) {
+                      transaction.update(change.doc.reference, {'impreso': true});
+                      return true;
+                    }
+                    return false;
+                  });
 
-                await change.doc.reference.update({'impreso': true});
+                  if (claimed) {
+                    // Impresión separada del claim: si falla, revertimos el flag
+                    // para que el próximo ciclo del stream lo intente de nuevo.
+                    try {
+                      await PrinterService().printTicket({
+                        'tipoTicket': 'RESERVA',
+                        'cliente': data['cliente'],
+                        'mesaNombre': data['mesaNombre'] ?? 'A DEFINIR',
+                        'fechaReserva': data['fecha'],
+                        'personas': data['personas'] ?? 0,
+                        'total': (data['costoReserva'] ?? 0).toDouble(),
+                      });
+                    } catch (printErr) {
+                      debugPrint("❌ Error imprimiendo reserva: $printErr");
+                      try {
+                        await change.doc.reference.update({'impreso': false});
+                      } catch (_) {}
+                    }
+                  }
+                } catch (e) {
+                  debugPrint("❌ Error en Auto-Print Reservas: $e");
+                }
               }
             }
           }
@@ -300,26 +349,55 @@ mixin DashboardLogic on State<DashboardMobile> {
               final data = change.doc.data();
 
               if (data != null && data['impreso'] != true) {
-                _playAlertSound();
+                try {
+                  // Transacción: reclamar impresión atómicamente
+                  final claimed = await FirebaseFirestore.instance.runTransaction<bool>((transaction) async {
+                    final freshDoc = await transaction.get(change.doc.reference);
+                    if (freshDoc.exists && freshDoc.data()?['impreso'] != true) {
+                      transaction.update(change.doc.reference, {'impreso': true});
+                      return true;
+                    }
+                    return false;
+                  });
 
-                await PrinterService().printComanda({
-                  ...data,
-                  'origen': 'app',
-                  'mesaNombre':
-                      data['metodoEntrega'] == 'delivery' ? 'DELIVERY' : 'RETIRO',
-                });
+                  if (claimed) {
+                    _playAlertSound();
+                    // Impresión separada del claim: si falla, revertimos el flag
+                    // para que el próximo ciclo del stream lo intente de nuevo.
+                    try {
+                      await PrinterService().printComanda({
+                        ...data,
+                        'origen': 'app',
+                        'mesaNombre':
+                            data['metodoEntrega'] == 'delivery' ? 'DELIVERY' : 'RETIRO',
+                      });
 
-                await PrinterService().printTicket({
-                  ...data,
-                  'tipoTicket': 'PEDIDO_CLIENTE',
-                  'cliente': data['clienteNombre'] ?? 'Cliente BarApp',
-                  'telefono': data['clienteTelefono'] ?? 'S/D',
-                  'direccion': data['direccion'] ?? 'Retira en Local',
-                  'total': (data['total'] as num?)?.toDouble() ?? 0.0,
-                  'costoEnvio': (data['costoEnvio'] as num?)?.toDouble() ?? 0.0,
-                });
-
-                await change.doc.reference.update({'impreso': true});
+                      final telVal = data['clienteTelefono'] ?? data['telefono'];
+                      final telTicket = (telVal != null &&
+                              telVal.toString().trim().isNotEmpty &&
+                              telVal.toString().toLowerCase() != 'null')
+                          ? telVal.toString()
+                          : 'S/D';
+                      await PrinterService().printTicket({
+                        ...data,
+                        'tipoTicket': 'PEDIDO_CLIENTE',
+                        'orderId': change.doc.id,
+                        'cliente': data['clienteNombre'] ?? 'Cliente BarApp',
+                        'telefono': telTicket,
+                        'direccion': data['direccion'] ?? 'Retira en Local',
+                        'total': (data['total'] as num?)?.toDouble() ?? 0.0,
+                        'costoEnvio': (data['costoEnvio'] as num?)?.toDouble() ?? 0.0,
+                      });
+                    } catch (printErr) {
+                      debugPrint("❌ Error imprimiendo pedido web: $printErr");
+                      try {
+                        await change.doc.reference.update({'impreso': false});
+                      } catch (_) {}
+                    }
+                  }
+                } catch (e) {
+                  debugPrint("❌ Error en Auto-Print Pedidos Web: $e");
+                }
               }
             }
           }

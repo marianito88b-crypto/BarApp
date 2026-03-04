@@ -24,6 +24,10 @@ class _DeliveryMobileState extends State<DeliveryMobile>
     with SingleTickerProviderStateMixin, DeliveryLogicMixin {
   late TabController _tabController;
 
+  // 🔥 FIX: Cachear streams para no recrear listeners en cada rebuild
+  late final Stream<QuerySnapshot> _ordersStream;
+  late final Stream<QuerySnapshot> _driversStream;
+
   @override
   String get placeId => widget.placeId;
 
@@ -31,6 +35,12 @@ class _DeliveryMobileState extends State<DeliveryMobile>
   void initState() {
     super.initState();
     _tabController = TabController(length: widget.userRol == 'repartidor' ? 1 : 2, vsync: this);
+    _ordersStream = getOrdersStream(
+      isActive: true,
+      userRol: widget.userRol,
+      userEmail: widget.userEmail,
+    );
+    _driversStream = getDriversStream();
   }
   @override
 void dispose() {
@@ -64,16 +74,12 @@ void dispose() {
             placeId: widget.placeId,
             userEmail: widget.userEmail,
             userRol: widget.userRol,
-            ordersStream: getOrdersStream(
-              isActive: true,
-              userRol: widget.userRol,
-              userEmail: widget.userEmail,
-            ),
-            driversStream: getDriversStream(),
+            ordersStream: _ordersStream,
+            driversStream: _driversStream,
           ),
           if (isAdmin) _RendicionFlotaList(
             placeId: widget.placeId,
-            driversStream: getDriversStream(),
+            driversStream: _driversStream,
           ),
         ],
       ),

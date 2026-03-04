@@ -305,7 +305,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen>
 // 🛵 WIDGET: ESTADO DEL DELIVERY / BOTÓN DE AVISO
 // ===========================================================================
 // ignore: unused_element
-class _DeliveryStatusSection extends StatelessWidget {
+class _DeliveryStatusSection extends StatefulWidget {
   final String placeId;
   final bool habilitado; // <--- 1. NUEVA VARIABLE
   final VoidCallback onNotificarTap;
@@ -316,23 +316,39 @@ class _DeliveryStatusSection extends StatelessWidget {
     required this.onNotificarTap,
   });
 
+  @override
+  State<_DeliveryStatusSection> createState() => _DeliveryStatusSectionState();
+}
+
+class _DeliveryStatusSectionState extends State<_DeliveryStatusSection> {
+  Stream<QuerySnapshot>? _ordersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    if (widget.habilitado && user != null) {
+      _ordersStream = FirebaseFirestore.instance
+          .collection('places')
+          .doc(widget.placeId)
+          .collection('orders')
+          .where('userId', isEqualTo: user.uid)
+          .where('estado', whereIn: ['pendiente', 'en_camino'])
+          .limit(1)
+          .snapshots();
+    }
+  }
+
  @override
   Widget build(BuildContext context) {
     // Si no está habilitado o no hay usuario, desaparece.
-    if (!habilitado) return const SizedBox.shrink();
+    if (!widget.habilitado) return const SizedBox.shrink();
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return const SizedBox.shrink();
 
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId) // Asegúrate que placeId esté accesible aquí (o usa widget.placeId)
-          .collection('orders')
-.where('userId', isEqualTo: user.uid)
-.where('estado', whereIn: ['pendiente', 'en_camino']) // Solo pedidos activos
-          .limit(1)
-          .snapshots(),
+      stream: _ordersStream,
       builder: (context, snapshot) {
         // Mientras carga, no mostramos nada para no dar saltos visuales
         if (!snapshot.hasData) return const SizedBox.shrink();

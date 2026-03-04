@@ -18,11 +18,16 @@ class CategoryListScreen extends StatefulWidget {
 
 class _CategoryListScreenState extends State<CategoryListScreen> {
   
-  Position? _userPosition; 
+  Position? _userPosition;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _placesStream;
 
   @override
   void initState() {
     super.initState();
+    _placesStream = FirebaseFirestore.instance
+        .collection('places')
+        .where('categories', arrayContains: widget.category.name)
+        .snapshots();
     _checkLocationPermission(); 
   }
 
@@ -56,13 +61,8 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
 
  @override
   Widget build(BuildContext context) {
-    final categoryString = widget.category.name;
-
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .where('categories', arrayContains: categoryString)
-          .snapshots(),
+      stream: _placesStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Center(child: Text('Error al cargar lugares.'));

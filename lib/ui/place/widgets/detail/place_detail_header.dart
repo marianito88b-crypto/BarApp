@@ -8,7 +8,7 @@ import 'package:barapp/services/follow_service.dart';
 /// Header modernizado del detalle de lugar con efecto Glass
 /// 
 /// Implementa un SliverAppBar con BackdropFilter y botón de favorito
-class PlaceDetailHeader extends StatelessWidget {
+class PlaceDetailHeader extends StatefulWidget {
   final String placeId;
   final String placeName;
   final String? coverImageUrl;
@@ -23,23 +23,36 @@ class PlaceDetailHeader extends StatelessWidget {
   });
 
   @override
+  State<PlaceDetailHeader> createState() => _PlaceDetailHeaderState();
+}
+
+class _PlaceDetailHeaderState extends State<PlaceDetailHeader> {
+  late final Stream<DocumentSnapshot> _userStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _userStream = FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(FirebaseAuth.instance.currentUser?.uid)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SliverAppBar(
       expandedHeight: 250.0,
       pinned: true,
-      backgroundColor: accentColor,
+      backgroundColor: widget.accentColor,
       actions: [
         // Botón de favorito con StreamBuilder
         StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(FirebaseAuth.instance.currentUser?.uid)
-              .snapshots(),
+          stream: _userStream,
           builder: (context, userSnap) {
             // Verificar si lo sigue
             final userData = userSnap.data?.data() as Map<String, dynamic>?;
             final List following = userData?['followingBars'] ?? [];
-            final bool isFollowing = following.contains(placeId);
+            final bool isFollowing = following.contains(widget.placeId);
 
             return Container(
               margin: const EdgeInsets.only(right: 12),
@@ -54,7 +67,7 @@ class PlaceDetailHeader extends StatelessWidget {
                 ),
                 onPressed: () async {
                   await FollowService.toggleFollow(
-                    placeId: placeId,
+                    placeId: widget.placeId,
                     isCurrentlyFollowing: isFollowing,
                   );
                 },
@@ -65,7 +78,7 @@ class PlaceDetailHeader extends StatelessWidget {
       ],
       flexibleSpace: FlexibleSpaceBar(
         title: Text(
-          placeName,
+          widget.placeName,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -78,18 +91,18 @@ class PlaceDetailHeader extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // Imagen de fondo
-            coverImageUrl != null
+            widget.coverImageUrl != null
                 ? CachedNetworkImage(
-                    imageUrl: coverImageUrl!,
+                    imageUrl: widget.coverImageUrl!,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(color: accentColor),
+                    placeholder: (context, url) => Container(color: widget.accentColor),
                     errorWidget: (context, url, error) => Container(
-                      color: accentColor.withValues(alpha: 0.5),
+                      color: widget.accentColor.withValues(alpha: 0.5),
                       child: const Icon(Icons.error, color: Colors.white24),
                     ),
                   )
                 : Container(
-                    color: accentColor.withValues(alpha: 0.5),
+                    color: widget.accentColor.withValues(alpha: 0.5),
                     child: const Icon(Icons.store, size: 80, color: Colors.white24),
                   ),
 

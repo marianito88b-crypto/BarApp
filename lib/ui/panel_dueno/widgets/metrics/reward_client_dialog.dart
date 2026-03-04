@@ -25,6 +25,7 @@ class _RewardClientDialogState extends State<RewardClientDialog> {
   final _codigoController = TextEditingController();
   final _descripcionController = TextEditingController();
   double _descuentoPorcentaje = 10.0;
+  ValidezCupon _validezCupon = ValidezCupon.dias7;
   bool _isGenerating = false;
   bool _isSubmitting = false;
 
@@ -70,7 +71,8 @@ class _RewardClientDialogState extends State<RewardClientDialog> {
         descuentoPorcentaje: _descuentoPorcentaje,
         descripcion: _descripcionController.text.trim().isNotEmpty
             ? _descripcionController.text.trim()
-            : 'Cupón de regalo por ser un cliente destacado',
+            : null,
+        validez: _validezCupon,
       );
 
       if (mounted) {
@@ -202,6 +204,55 @@ class _RewardClientDialogState extends State<RewardClientDialog> {
               label: "${_descuentoPorcentaje.toInt()}%",
               activeColor: Colors.orangeAccent,
               onChanged: (value) => setState(() => _descuentoPorcentaje = value),
+            ),
+            const SizedBox(height: 16),
+
+            // Validez del cupón
+            const Text(
+              "Validez del cupón:",
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<ValidezCupon>(
+                  value: _validezCupon,
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF2C2C2C),
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.orangeAccent),
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                  items: const [
+                    DropdownMenuItem(
+                      value: ValidezCupon.horas24,
+                      child: Row(
+                        children: [
+                          Icon(Icons.schedule, size: 18, color: Colors.orangeAccent),
+                          SizedBox(width: 10),
+                          Text("24 Horas"),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: ValidezCupon.dias3,
+                      child: Text("3 Días"),
+                    ),
+                    DropdownMenuItem(
+                      value: ValidezCupon.dias7,
+                      child: Text("7 Días (recomendado)"),
+                    ),
+                  ],
+                  onChanged: (ValidezCupon? v) {
+                    if (v != null) setState(() => _validezCupon = v);
+                  },
+                ),
+              ),
             ),
             const SizedBox(height: 16),
 

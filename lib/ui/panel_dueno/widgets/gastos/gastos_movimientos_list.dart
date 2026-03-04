@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 /// Lista de movimientos de gastos recientes
-class GastosMovimientosList extends StatelessWidget {
+class GastosMovimientosList extends StatefulWidget {
   final String placeId;
 
   const GastosMovimientosList({
@@ -12,15 +12,28 @@ class GastosMovimientosList extends StatelessWidget {
   });
 
   @override
+  State<GastosMovimientosList> createState() => _GastosMovimientosListState();
+}
+
+class _GastosMovimientosListState extends State<GastosMovimientosList> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('gastos')
+        .orderBy('fecha', descending: true)
+        .limit(50)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('gastos')
-          .orderBy('fecha', descending: true)
-          .limit(50)
-          .snapshots(),
+      stream: _stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -99,9 +112,12 @@ class GastosMovimientosList extends StatelessWidget {
                 ),
                 subtitle: Row(
                   children: [
-                    Text(
-                      "${DateFormat('dd/MM').format(fecha)} • ${gasto['categoria']}",
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                    Flexible(
+                      child: Text(
+                        "${DateFormat('dd/MM').format(fecha)} • ${gasto['categoria']}",
+                        style: const TextStyle(color: Colors.white38, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     if (esPendiente) ...[
                       const SizedBox(width: 8),

@@ -7,8 +7,48 @@ import 'modals/followed_bars_modal.dart';
 /// Preview de bares seguidos con carrusel horizontal
 /// 
 /// Muestra un pequeño carrusel de logos y un botón "Ver todos"
-class FollowedBarsPreview extends StatelessWidget {
+class FollowedBarsPreview extends StatefulWidget {
   const FollowedBarsPreview({super.key});
+
+  @override
+  State<FollowedBarsPreview> createState() => _FollowedBarsPreviewState();
+}
+
+class _FollowedBarsPreviewState extends State<FollowedBarsPreview> {
+  Stream<DocumentSnapshot>? _userStream;
+  Stream<QuerySnapshot>? _placesStream;
+  List<String>? _cachedPreviewList;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _userStream = FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(uid)
+          .snapshots();
+    }
+  }
+
+  Stream<QuerySnapshot> _getPlacesStream(List<String> previewList) {
+    if (_cachedPreviewList == null || !_listEquals(_cachedPreviewList!, previewList)) {
+      _cachedPreviewList = List.from(previewList);
+      _placesStream = FirebaseFirestore.instance
+          .collection('places')
+          .where(FieldPath.documentId, whereIn: previewList)
+          .snapshots();
+    }
+    return _placesStream!;
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,10 +56,7 @@ class FollowedBarsPreview extends StatelessWidget {
     if (uid == null) return const SizedBox.shrink();
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(uid)
-          .snapshots(),
+      stream: _userStream,
       builder: (context, userSnap) {
         if (!userSnap.hasData) return const SizedBox.shrink();
 
@@ -76,10 +113,7 @@ class FollowedBarsPreview extends StatelessWidget {
             ),
 
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('places')
-                  .where(FieldPath.documentId, whereIn: previewList)
-                  .snapshots(),
+              stream: _getPlacesStream(previewList),
               builder: (context, snap) {
                 if (!snap.hasData) {
                   return const SizedBox(

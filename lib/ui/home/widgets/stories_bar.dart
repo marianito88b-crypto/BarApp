@@ -33,15 +33,22 @@ class StoriesBar extends StatefulWidget {
 
 class _StoriesBarState extends State<StoriesBar> {
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  late final Stream<QuerySnapshot> _storiesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _storiesStream = FirebaseFirestore.instance
+        .collection('stories')
+        .where('expiresAt', isGreaterThan: Timestamp.now())
+        .orderBy('expiresAt', descending: true)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('stories')
-          .where('expiresAt', isGreaterThan: Timestamp.now())
-          .orderBy('expiresAt', descending: true)
-          .snapshots(),
+      stream: _storiesStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(height: 90, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
@@ -144,22 +151,37 @@ class _StoriesBarState extends State<StoriesBar> {
 // WIDGET INTELIGENTE REFACTORIZADO
 // -----------------------------------------------------------
 
-class _StoryAvatar extends StatelessWidget {
+class _StoryAvatar extends StatefulWidget {
   final StoryGroup group;
   final VoidCallback onTap;
   
   const _StoryAvatar({required this.group, required this.onTap});
 
   @override
+  State<_StoryAvatar> createState() => _StoryAvatarState();
+}
+
+class _StoryAvatarState extends State<_StoryAvatar> {
+  Stream<DocumentSnapshot>? _userStream;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.group.isOwnStory) {
+      _userStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.group.authorId)
+          .snapshots();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Si es MI historia (o mi botón de agregar), busco la foto fresca en Firestore
     // para evitar que salga la "M" o una foto vieja.
-    if (group.isOwnStory) {
+    if (widget.group.isOwnStory) {
       return StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(group.authorId)
-            .snapshots(),
+        stream: _userStream,
         builder: (context, snapshot) {
           String? realPhotoUrl;
           if (snapshot.hasData && snapshot.data!.exists) {
@@ -168,7 +190,7 @@ class _StoryAvatar extends StatelessWidget {
             realPhotoUrl = data?['photoUrl']; 
           }
           // Si no cargó todavía, usa lo que venía en el grupo (fallback)
-          realPhotoUrl ??= group.authorPhotoUrl;
+          realPhotoUrl ??= widget.group.authorPhotoUrl;
           
           return _buildAvatarUI(context, realPhotoUrl);
         },
@@ -176,17 +198,17 @@ class _StoryAvatar extends StatelessWidget {
     }
 
     // Para otros usuarios, usamos lo que viene en la historia (para no leer tanto la BD)
-    return _buildAvatarUI(context, group.authorPhotoUrl);
+    return _buildAvatarUI(context, widget.group.authorPhotoUrl);
   }
 
   Widget _buildAvatarUI(BuildContext context, String? photoUrl) {
     final accent = Theme.of(context).colorScheme.primary;
-    final bool hasStories = group.stories.isNotEmpty;
+    final bool hasStories = widget.group.stories.isNotEmpty;
     // Si es "Tu historia" vacía, mostramos "Tu Historia", si no el nombre
-    final displayName = (group.isOwnStory && !hasStories) ? 'Tu Historia' : group.authorName;
+    final displayName = (widget.group.isOwnStory && !hasStories) ? 'Tu Historia' : widget.group.authorName;
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6.0),
         child: Column(
@@ -216,9 +238,9 @@ class _StoryAvatar extends StatelessWidget {
                 displayName,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: group.isOwnStory ? Colors.white : Colors.white70, 
+                  color: widget.group.isOwnStory ? Colors.white : Colors.white70, 
                   fontSize: 11,
-                  fontWeight: group.isOwnStory ? FontWeight.w600 : FontWeight.normal,
+                  fontWeight: widget.group.isOwnStory ? FontWeight.w600 : FontWeight.normal,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -232,7 +254,7 @@ class _StoryAvatar extends StatelessWidget {
 
   Widget _buildImageContent(String? url, bool hasStories) {
     // 1. Caso especial: Mi historia vacía -> Mostrar símbolo +
-    if (group.isOwnStory && !hasStories) {
+    if (widget.group.isOwnStory && !hasStories) {
       // Si hay URL, la mostramos con un iconito de + superpuesto? 
       // Por simplicidad, si hay foto la mostramos, si no, ícono.
       // Pero normalmente el "Agregar" muestra la foto del usuario con un badge.
@@ -244,9 +266,9 @@ class _StoryAvatar extends StatelessWidget {
             Image.network(
               url,
               fit: BoxFit.cover,
-              errorBuilder: (ctx, error, stack) => Container(
-                color: Colors.grey[800],
-                child: const Icon(Icons.person, color: Colors.white60),
+              errorBuilder: (ctx, error, stack) => Image.asset(
+                'assets/images/usuario.png',
+                fit: BoxFit.cover,
               ),
             ),
             // Opcional: un pequeño overlay de "+"
@@ -270,11 +292,8 @@ class _StoryAvatar extends StatelessWidget {
         url,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
-          // Si falla la carga de la imagen, mostramos el icono en vez de romper
-          return Container(
-            color: Colors.grey[800],
-            child: const Icon(Icons.person, color: Colors.white60),
-          );
+          // Si falla la carga de la imagen, mostramos usuario genérico
+          return Image.asset('assets/images/usuario.png', fit: BoxFit.cover);
         },
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
@@ -287,9 +306,6 @@ class _StoryAvatar extends StatelessWidget {
     }
 
     // 3. Fallback final si no hay URL
-    return Container(
-      color: Colors.grey[800],
-      child: const Icon(Icons.person, color: Colors.white60),
-    );
+    return Image.asset('assets/images/usuario.png', fit: BoxFit.cover);
   }
 }

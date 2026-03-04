@@ -1,8 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class NotificationsAdminScreen extends StatelessWidget {
+class NotificationsAdminScreen extends StatefulWidget {
   const NotificationsAdminScreen({super.key});
+
+  @override
+  State<NotificationsAdminScreen> createState() => _NotificationsAdminScreenState();
+}
+
+class _NotificationsAdminScreenState extends State<NotificationsAdminScreen> {
+  late final Stream<QuerySnapshot> _notificationsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _notificationsStream = FirebaseFirestore.instance
+        .collection('notification_limits')
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,9 +27,7 @@ class NotificationsAdminScreen extends StatelessWidget {
         backgroundColor: Colors.black,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('notification_limits')
-            .snapshots(),
+        stream: _notificationsStream,
         builder: (context, snap) {
   // 1. Cargando
   if (snap.connectionState == ConnectionState.waiting) {

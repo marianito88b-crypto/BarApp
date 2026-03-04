@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../sections/proveedor_detalle_screen.dart';
 
 /// Lista de proveedores
-class ProveedoresList extends StatelessWidget {
+class ProveedoresList extends StatefulWidget {
   final String placeId;
 
   const ProveedoresList({
@@ -12,13 +12,26 @@ class ProveedoresList extends StatelessWidget {
   });
 
   @override
+  State<ProveedoresList> createState() => _ProveedoresListState();
+}
+
+class _ProveedoresListState extends State<ProveedoresList> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('proveedores')
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('proveedores')
-          .snapshots(),
+      stream: _stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -35,7 +48,7 @@ class ProveedoresList extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (context) => ProveedorDetalleScreen(
-                      placeId: placeId,
+                      placeId: widget.placeId,
                       provId: prov.id,
                       nombre: prov['nombre'],
                     ),

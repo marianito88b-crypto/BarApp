@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:barapp/services/printer/printer_service.dart';
-import 'package:barapp/services/barpoints_service.dart';
 import 'package:barapp/services/coupons_service.dart';
 import 'package:barapp/ui/panel_dueno/widgets/delivery/client_rating_dialog.dart';
 
@@ -190,7 +189,7 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
       if (metodoEntrega == 'retiro') {
         final prefs = await SharedPreferences.getInstance();
         if (prefs.getBool('autoPrintCliente') == true && orderData != null) {
-          await _printCliente(orderData);
+          await _printCliente({...orderData, 'orderId': orderId});
         }
         await _updateStatus(orderId, 'listo_para_retirar');
       } else {
@@ -228,7 +227,7 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
 
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('autoPrintCliente') == true && orderData != null) {
-        await _printCliente(orderData);
+        await _printCliente({...orderData, 'orderId': orderId});
       }
 
       await FirebaseFirestore.instance
@@ -271,15 +270,69 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
   }) async {
     setLoading(true);
     try {
-      // 1. Obtener datos frescos del pedido para evitar inconsistencias
-      final freshSnap = await FirebaseFirestore.instance
+      // Referencia al pedido original
+      final orderRef = FirebaseFirestore.instance
           .collection('places')
           .doc(placeId)
           .collection('orders')
-          .doc(orderId)
-          .get();
+          .doc(orderId);
 
-      if (!freshSnap.exists) {
+      // TRANSACCIÓN ATÓMICA: leer → verificar estado → actualizar + crear venta
+      // Previene duplicados si se llama dos veces simultáneamente.
+      final freshData = await FirebaseFirestore.instance.runTransaction<Map<String, dynamic>?>((transaction) async {
+        final freshSnap = await transaction.get(orderRef);
+
+        if (!freshSnap.exists) return null;
+
+        final data = freshSnap.data()!;
+        if (data['estado'] == 'entregado') {
+          throw Exception('already-delivered');
+        }
+
+        // Sanitización de datos numéricos
+        final double totalFinal = (data['total'] as num?)?.toDouble() ?? 0.0;
+        final double costoEnvio = (data['costoEnvio'] as num? ?? 0.0).toDouble();
+        final double totalComida = (data['totalComida'] as num?)?.toDouble() ?? (totalFinal - costoEnvio);
+
+        final String metodoEntrega = data['metodoEntrega'] ?? 'retiro';
+        final String metodoPago = (data['metodoPago'] ?? 'efectivo').toString().toLowerCase();
+        final String repartidorId = (metodoEntrega == 'retiro')
+            ? 'MOSTRADOR'
+            : (data['driverEmail'] ?? 'SIN_ASIGNAR');
+
+        // Referencia a la nueva venta
+        final saleRef = FirebaseFirestore.instance
+            .collection('places')
+            .doc(placeId)
+            .collection('ventas')
+            .doc();
+
+        transaction.update(orderRef, {
+          'estado': 'entregado',
+          'entregadoAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.set(saleRef, {
+          'fecha': FieldValue.serverTimestamp(),
+          'total': totalFinal,
+          'totalComida': totalComida,
+          'totalEnvio': costoEnvio,
+          'repartidor': repartidorId,
+          'mesa': 'App-Bar',
+          'origen': 'app',
+          'metodoPrincipal': metodoPago,
+          'items': data['items'] ?? [],
+          'pagos': [
+            {'metodo': metodoPago, 'monto': totalFinal, 'tipo': 'total'}
+          ],
+          'orderId': orderId,
+          'cliente': data['clienteNombre'] ?? 'Cliente App',
+        });
+
+        return data;
+      });
+
+      if (freshData == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -291,109 +344,22 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
         return;
       }
 
-      final freshData = freshSnap.data()!;
-
-      // 2. Verificar que el pedido no esté ya entregado (evitar duplicados)
-      if (freshData['estado'] == 'entregado') {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Este pedido ya fue entregado"),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-
-      // 3. Sanitización de datos numéricos
-      final double totalFinal = (freshData['total'] as num?)?.toDouble() ?? 0.0;
-      final double costoEnvio =
-          (freshData['costoEnvio'] as num? ?? 0.0).toDouble();
-      final double totalComida = (freshData['totalComida'] as num?)?.toDouble() ??
-          (totalFinal - costoEnvio);
-
-      // 4. Datos de contexto
-      final String metodoEntrega = freshData['metodoEntrega'] ?? 'retiro';
-      final String metodoPago =
-          (freshData['metodoPago'] ?? 'efectivo').toString().toLowerCase();
-
-      final String repartidorId = (metodoEntrega == 'retiro')
-          ? 'MOSTRADOR'
-          : (freshData['driverEmail'] ?? 'SIN_ASIGNAR');
-
-      // 5. Crear BATCH atómico (todo o nada)
-      final batch = FirebaseFirestore.instance.batch();
-
-      // Referencia al pedido original
-      final orderRef = FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('orders')
-          .doc(orderId);
-
-      // Referencia a la nueva venta
-      final saleRef = FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('ventas')
-          .doc();
-
-      // 6. Operaciones del batch
-      batch.update(orderRef, {
-        'estado': 'entregado',
-        'entregadoAt': FieldValue.serverTimestamp(),
-      });
-
-      batch.set(saleRef, {
-        'fecha': FieldValue.serverTimestamp(),
-        'total': totalFinal,
-        'totalComida': totalComida,
-        'totalEnvio': costoEnvio,
-        'repartidor': repartidorId,
-        'mesa': 'App-Bar',
-        'origen': 'app',
-        'metodoPrincipal': metodoPago,
-        'items': freshData['items'] ?? [],
-        'pagos': [
-          {'metodo': metodoPago, 'monto': totalFinal, 'tipo': 'total'}
-        ],
-        'orderId': orderId,
-        'cliente': freshData['clienteNombre'] ?? 'Cliente App',
-      });
-
-      // 7. Ejecutar batch atómico (si falla, ninguna operación se ejecuta)
-      await batch.commit();
-
-      // ============================================================
-      // ACREDITAR BARPOINTS AL USUARIO
-      // ============================================================
-      // Cuando el pedido se completa, acreditamos los puntos estimados
-      // al usuario que realizó el pedido
-      final String? userId = freshData['userId'] as String?;
-      final int puntosEstimados = (freshData['puntosEstimados'] as num?)?.toInt() ?? 0;
-      
-      if (userId != null && userId.isNotEmpty && puntosEstimados > 0) {
-        try {
-          await BarPointsService.acreditarPuntos(
-            userId: userId,
-            orderId: orderId,
-            placeId: placeId,
-            puntosEstimados: puntosEstimados,
-          );
-        } catch (e) {
-          debugPrint('⚠️ Error acreditando BarPoints (no crítico): $e');
-          // No bloqueamos el flujo si falla la acreditación de puntos
-        }
-      }
+      // BarPoints: La Cloud Function onOrderDelivered se dispara automáticamente
+      // al detectar estado 'entregado' y acredita los puntos con Admin SDK (máxima seguridad).
 
       // ============================================================
       // REGISTRAR USO DE CUPÓN (si se aplicó uno)
+      // Solo para cupones maestros (globales): los cupones personales (cuponId presente)
+      // ya fueron atomicamente registrados en cupones_usados al crear el pedido.
       // ============================================================
+      final String? userId = freshData['userId'] as String?;
       final String? codigoDescuento = freshData['codigoDescuento'] as String?;
       final double? descuentoAplicado = (freshData['descuentoAplicado'] as num?)?.toDouble();
+      final bool cuponYaRegistrado = freshData['cuponId'] != null;
       
-      if (userId != null && userId.isNotEmpty && codigoDescuento != null && codigoDescuento.isNotEmpty) {
+      if (userId != null && userId.isNotEmpty &&
+          codigoDescuento != null && codigoDescuento.isNotEmpty &&
+          !cuponYaRegistrado) {
         try {
           await CouponsService.registrarUsoCupon(
             userId: userId,
@@ -402,7 +368,7 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
             placeId: placeId,
             descuentoAplicado: descuentoAplicado,
           );
-          debugPrint('✅ Uso de cupón registrado: $codigoDescuento');
+          debugPrint('✅ Uso de cupón maestro registrado: $codigoDescuento');
         } catch (e) {
           debugPrint('⚠️ Error registrando uso de cupón (no crítico): $e');
           // No bloqueamos el flujo si falla el registro
@@ -438,14 +404,26 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
         }
       }
     } catch (e) {
-      debugPrint("🔥 Error crítico al finalizar venta: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error al finalizar: $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
+      final msg = e.toString();
+      if (msg.contains('already-delivered')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Este pedido ya fue entregado"),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        debugPrint("🔥 Error crítico al finalizar venta: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Error al finalizar: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } finally {
       setLoading(false);
@@ -585,11 +563,18 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
           ),
         );
       }
+      final telefonoVal = orderData['clienteTelefono'] ?? orderData['telefono'];
+      final telefonoTicket = (telefonoVal != null &&
+              telefonoVal.toString().trim().isNotEmpty &&
+              telefonoVal.toString().toLowerCase() != 'null')
+          ? telefonoVal.toString()
+          : 'S/D';
       await PrinterService().printTicket({
         ...orderData,
         'tipoTicket': 'PEDIDO_CLIENTE',
+        'orderId': orderData['orderId'] ?? orderData['id'],
         'cliente': orderData['clienteNombre'] ?? 'Cliente',
-        'telefono': orderData['clienteTelefono'] ?? 'S/D',
+        'telefono': telefonoTicket,
         'direccion': orderData['direccion'] ?? 'Retira',
         'total': (orderData['total'] as num?)?.toDouble() ?? 0.0,
         'costoEnvio': (orderData['costoEnvio'] as num?)?.toDouble() ?? 0.0,

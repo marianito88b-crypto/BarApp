@@ -98,7 +98,7 @@ mixin PlaceDetailLogicMixin<T extends StatefulWidget> on State<T> {
   Future<void> submitRating(Place place, int rating, String comment) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
+      if (user == null || user.isAnonymous) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Iniciá sesión para calificar.')),

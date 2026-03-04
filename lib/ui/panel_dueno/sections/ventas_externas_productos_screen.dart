@@ -1,4 +1,3 @@
-// ignore_for_file: use_build_context_synchronously
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:barapp/ui/ventas_externas/modal_checkout_venta_externa.dart';
@@ -18,6 +17,18 @@ class VentasExternasProductosScreen extends StatefulWidget {
 class _VentasExternasProductosScreenState
     extends State<VentasExternasProductosScreen> with VentaExternaCartMixin {
   String _busqueda = '';
+  late final Stream<QuerySnapshot> _menuStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('menu')
+        .orderBy('categoria')
+        .snapshots();
+  }
 
   // ===========================================================================
   // 🖥️ UI
@@ -69,13 +80,7 @@ class _VentasExternasProductosScreenState
 
   Widget _buildProductList() {
     return StreamBuilder<QuerySnapshot>(
-      stream:
-          FirebaseFirestore.instance
-              .collection('places')
-              .doc(widget.placeId)
-              .collection('menu')
-              .orderBy('categoria')
-              .snapshots(),
+      stream: _menuStream,
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(

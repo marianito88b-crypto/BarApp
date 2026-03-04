@@ -1,7 +1,7 @@
 name: barapp
 description: BarApp – guía social de restaurantes, bares, cafés y heladerías.
 publish_to: 'none'
-version: 2.0.4+7
+version: 2.0.5+8
 
 environment:
   sdk: ">=3.7.0 <4.0.0"
@@ -64,6 +64,7 @@ dependencies:
   firebase_messaging: ^16.0.4
   file_picker: ^10.3.7
   flutter_local_notifications: ^19.5.0
+  app_badge_plus: ^1.2.6
   http: ^1.6.0
   universal_io: ^2.3.1
   shared_preferences: ^2.5.4
@@ -85,6 +86,7 @@ flutter:
     - assets/sounds/
     - assets/images/restaurant.png
     - assets/images/pattern_bg.png
+    - assets/images/usuario.png
 
 flutter_launcher_icons:
   android: "launcher_icon"

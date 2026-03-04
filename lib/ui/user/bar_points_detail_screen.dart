@@ -23,11 +23,14 @@ class BarPointsDetailScreen extends StatefulWidget {
 
 class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
   late ConfettiController _confettiController;
+  late final Future<String>? _resolveCollectionFuture;
 
   @override
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 2));
+    final uid = widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
+    _resolveCollectionFuture = uid != null ? _resolveUserCollection(uid) : null;
   }
 
   @override
@@ -80,7 +83,7 @@ class _BarPointsDetailScreenState extends State<BarPointsDetailScreen> {
           // ── Contenido ─────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: FutureBuilder<String>(
-              future: _resolveUserCollection(uid),
+              future: _resolveCollectionFuture,
               builder: (context, colSnap) {
                 if (!colSnap.hasData) {
                   return const Center(

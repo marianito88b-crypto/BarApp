@@ -573,12 +573,23 @@ Future<void> _openComments(StoryItem story) async {
   final uid = _currentUserId;
   if (uid == null) return;
 
+  _togglePause(true); // Pausar historia mientras se comenta
+
   final user = FirebaseAuth.instance.currentUser;
   final name = user?.displayName ?? 'Usuario';
   final photo = user?.photoURL;
 
   final TextEditingController controller = TextEditingController();
   bool sending = false;
+
+  // Cache the comments stream before showing the modal
+  final commentsStream = FirebaseFirestore.instance
+      .collection('stories')
+      .doc(story.id)
+      .collection('comments')
+      .orderBy('createdAt', descending: true)
+      .limit(50)
+      .snapshots();
 
   await showModalBottomSheet(
     context: context,
@@ -631,13 +642,7 @@ Future<void> _openComments(StoryItem story) async {
             // Lista de comentarios
             Flexible(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('stories')
-                    .doc(story.id)
-                    .collection('comments')
-                    .orderBy('createdAt', descending: true)
-                    .limit(50)
-                    .snapshots(),
+                stream: commentsStream,
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(
@@ -850,7 +855,9 @@ Future<void> _openComments(StoryItem story) async {
         ),
       );
     },
-  );
+  ).whenComplete(() {
+    if (mounted) _togglePause(false); // Reanudar al cerrar modal/teclado
+  });
 }
 
 @override

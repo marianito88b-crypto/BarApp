@@ -100,6 +100,7 @@ mixin PanelDuenoLogic on State<PanelDuenoScreen> {
   void togglePanelDuenoAudio() async {
     if (!_audioEnabled) {
       await _audioPlayer.play(AssetSource('sounds/ding.mp3'));
+      if (!mounted) return;
       setState(() => _audioEnabled = true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -110,6 +111,7 @@ mixin PanelDuenoLogic on State<PanelDuenoScreen> {
         );
       }
     } else {
+      if (!mounted) return;
       setState(() => _audioEnabled = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

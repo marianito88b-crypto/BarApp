@@ -13,14 +13,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_options.dart';
+import 'config/env_config.dart';
+import 'utils/maps_script_loader_stub.dart' if (dart.library.html) 'utils/maps_script_loader_web.dart' as maps_script_loader;
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'theme.dart';
 
 import 'ui/auth/auth_gate.dart';
 import 'ui/place/place_detail_screen.dart';
-import 'ui/chat/chat_screen.dart';
-import 'package:barapp/ui/events/events_screen.dart';
 import 'providers/blocked_users_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -43,13 +43,46 @@ void main() async {
     // 🛠️ FIX 1: Usamos la clase concreta WidgetsFlutterBinding
     WidgetsFlutterBinding.ensureInitialized();
 
-    // 1. INICIALIZAR FIREBASE (requiere dart_defines.json)
+    // 1. INYECCIÓN DE GOOGLE MAPS (solo Web, antes de que cargue cualquier mapa)
+    if (kIsWeb && googleMapsApiKey.isNotEmpty) {
+      maps_script_loader.injectGoogleMapsScript(googleMapsApiKey);
+    }
+
+    // 2. INICIALIZAR FIREBASE (requiere --dart-define-from-file=dart_defines.json)
     final opts = DefaultFirebaseOptions.currentPlatform;
     if (opts.apiKey.isEmpty) {
-      throw Exception(
-        'Configura las claves: copia dart_defines.json.example a dart_defines.json, '
-        'rellena las claves y ejecuta con: flutter run --dart-define-from-file=dart_defines.json',
-      );
+      // En vez de throw (pantalla blanca), mostrar error visual
+      runApp(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: const Color(0xFF121212),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 64),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Error de configuración',
+                    style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    kIsWeb
+                        ? 'Build sin claves Firebase.\n\nUsá: flutter build web --release --dart-define-from-file=dart_defines.json'
+                        : 'Falta dart_defines.json. Ejecutá con --dart-define-from-file=dart_defines.json',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ));
+      return;
     }
     await Firebase.initializeApp(options: opts);
 
@@ -114,11 +147,25 @@ class BarAppUniversal extends StatefulWidget {
   State<BarAppUniversal> createState() => _BarAppUniversalState();
 }
 
-class _BarAppUniversalState extends State<BarAppUniversal> {
+class _BarAppUniversalState extends State<BarAppUniversal> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _safeInit();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !kIsWeb) {
+      NotificationService.clearBadge();
+    }
   }
 
   Future<void> _safeInit() async {
@@ -156,6 +203,12 @@ class _BarAppUniversalState extends State<BarAppUniversal> {
         _saveUserToken(user);
       }
     });
+
+    // 6. Refresh FCM token on cold start (si ya está logueado)
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null && !kIsWeb) {
+      _saveUserToken(currentUser);
+    }
   }
 
   void _subscribeToGlobalTopics() async {
@@ -273,35 +326,10 @@ class _BarAppUniversalState extends State<BarAppUniversal> {
   }
 
   void _handleMessage(RemoteMessage message) {
-    if (message.data.isNotEmpty) {
-      final String? type = message.data['type'];
-      final String? id = message.data['id'];
-      final String? extraName = message.data['extraName'];
-
-      if (type == 'event') {
-        navigatorKey.currentState?.push(
-          MaterialPageRoute(builder: (_) => const EventsScreen()),
-        );
-        return; 
-      }
-
-      if (id != null) {
-        if (type == 'bar_detail') {
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(builder: (_) => PlaceDetailScreen(placeId: id)),
-          );
-        } else if (type == 'chat') {
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(
-              builder: (_) => ChatScreen(
-                otherUserId: id,
-                otherDisplayName: extraName ?? 'Chat',
-              ),
-            ),
-          );
-        }
-      }
-    }
+    if (message.data.isEmpty) return;
+    NotificationService.handleNotificationNavigation(
+      Map<String, dynamic>.from(message.data),
+    );
   }
 
   Future<void> _checkWebNavigation() async {

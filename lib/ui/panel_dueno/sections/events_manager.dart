@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../widgets/events/notification_limits_banner.dart';
 import '../widgets/events/modals/event_editor_dialog.dart';
@@ -18,11 +19,20 @@ class _EventsManagerScreenState extends State<EventsManagerScreen>
   @override
   String get placeId => widget.placeId;
 
+  late final Stream<QuerySnapshot> _eventsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _eventsStream = getEventsStream();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: "fab_events_manager",
         onPressed: () => EventEditorDialog.show(
           context: context,
           placeId: placeId,
@@ -44,12 +54,12 @@ class _EventsManagerScreenState extends State<EventsManagerScreen>
                 return isDesktop
                     ? EventsDesktopLayout(
                         placeId: placeId,
-                        eventsStream: getEventsStream(),
+                        eventsStream: _eventsStream,
                         onDeleteEvent: deleteEvent,
                       )
                     : EventsMobileLayout(
                         placeId: placeId,
-                        eventsStream: getEventsStream(),
+                        eventsStream: _eventsStream,
                         onDeleteEvent: deleteEvent,
                       );
               },

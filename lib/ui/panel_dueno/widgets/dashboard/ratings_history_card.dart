@@ -11,7 +11,7 @@ import '../delivery/client_rating_dialog.dart';
 /// RUTA A: Lee de places/{placeId}/ratings_recibidas
 /// Campos: estrellas, etiquetas, comentarios, clienteNombre, clienteId, timestamp.
 /// Avatar y displayName se obtienen del documento del usuario (usuarios/users).
-class RatingsHistoryCard extends StatelessWidget {
+class RatingsHistoryCard extends StatefulWidget {
   final String placeId;
 
   const RatingsHistoryCard({
@@ -20,15 +20,28 @@ class RatingsHistoryCard extends StatelessWidget {
   });
 
   @override
+  State<RatingsHistoryCard> createState() => _RatingsHistoryCardState();
+}
+
+class _RatingsHistoryCardState extends State<RatingsHistoryCard> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('ratings_recibidas')
+        .orderBy('timestamp', descending: true)
+        .limit(10)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('ratings_recibidas')
-          .orderBy('timestamp', descending: true)
-          .limit(10)
-          .snapshots(),
+      stream: _stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox.shrink();
@@ -149,7 +162,7 @@ class RatingsHistoryCard extends StatelessWidget {
                   clienteNombre: clienteNombre,
                   userId: userId,
                   orderId: orderId,
-                  placeId: placeId,
+                  placeId: widget.placeId,
                   estrellas: estrellas,
                   etiquetas: etiquetas,
                   comentarios: comentarios,

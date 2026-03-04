@@ -41,6 +41,16 @@ class _ClientCheckoutScreenState extends State<ClientCheckoutScreen>
   double _discountAmount = 0.0;
   double? _discountPorcentaje;
   bool _isBarPointsCupon = false;
+  late final Stream<DocumentSnapshot> _placeStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placeStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+  }
 
   @override
   void dispose() {
@@ -65,11 +75,7 @@ class _ClientCheckoutScreenState extends State<ClientCheckoutScreen>
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: StreamBuilder<DocumentSnapshot>(
-        stream:
-            FirebaseFirestore.instance
-                .collection('places')
-                .doc(widget.placeId)
-                .snapshots(),
+        stream: _placeStream,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Scaffold(
@@ -447,7 +453,7 @@ class _ClientCheckoutScreenState extends State<ClientCheckoutScreen>
 
                                   setState(() => _isLoading = true);
 
-                                  final orderId = await submitOrder(
+                                  await submitOrder(
                                     placeId: widget.placeId,
                                     cart: widget.cart,
                                     placeWhatsapp: placeWhatsapp,
@@ -473,32 +479,8 @@ class _ClientCheckoutScreenState extends State<ClientCheckoutScreen>
                                     origenBarpoints: _isBarPointsCupon,
                                     cuponId: _cuponId,
                                   );
-
-                                  // Registrar uso del cupón si se aplicó uno
-                                  if (_appliedDiscountCode != null && orderId != null) {
-                                    try {
-                                      final user = FirebaseAuth.instance.currentUser;
-                                      if (user != null) {
-                                        await CouponsService.registrarUsoCupon(
-                                          userId: user.uid,
-                                          codigo: _appliedDiscountCode!,
-                                          orderId: orderId,
-                                          placeId: widget.placeId,
-                                          descuentoAplicado: _discountAmount,
-                                        );
-                                        // Marcar cupón como usado en mis_cupones
-                                        if (_cuponId != null) {
-                                          await CouponsService.marcarCuponComoUsado(
-                                            userId: user.uid,
-                                            cuponId: _cuponId!,
-                                          );
-                                        }
-                                      }
-                                    } catch (e) {
-                                      debugPrint('⚠️ Error registrando uso de cupón: $e');
-                                      // No bloqueamos el flujo si falla el registro
-                                    }
-                                  }
+                                  // Nota: El uso del cupón se registra atómicamente dentro de submitOrder
+                                  // cuando hay cuponId (transacción pedido+cupón) para prevenir doble gasto.
 
                                   if (mounted) {
                                     setState(() => _isLoading = false);
@@ -656,7 +638,8 @@ class _ClientCheckoutScreenState extends State<ClientCheckoutScreen>
 
       // Código válido, aplicar descuento (guardamos código normalizado)
       final descuentoPorcentaje = (resultado['descuentoPorcentaje'] as num).toDouble();
-      final descuento = _subtotal * (descuentoPorcentaje / 100);
+      // Redondeo a 2 decimales para evitar errores en pasarelas de pago
+      final descuento = (_subtotal * (descuentoPorcentaje / 100) * 100).round() / 100;
 
       setState(() {
         _appliedDiscountCode = codigoNorm;

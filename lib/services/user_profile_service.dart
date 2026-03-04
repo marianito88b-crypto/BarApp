@@ -15,7 +15,7 @@ Future<bool> needsProfileCompletion(User user) async {
     // Si no existe en base de datos, lo creamos y lo dejamos pasar
     if (!docSnapshot.exists) {
       await _usersRef.doc(uid).set({
-        'displayName': 'Invitado', // Nombre por defecto
+        'displayName': 'Visitante_${uid.substring(0, 6).toUpperCase()}', // Nombre único por invitado
         'imageUrl': null,
         'hasCompletedProfile': true, // Importante para que no lo pida de nuevo
         'isGuest': true, // Flag útil para limitar funciones después (ej: no dejar comentar)

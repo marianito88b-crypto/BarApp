@@ -1,4 +1,5 @@
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -9,7 +10,14 @@ import 'package:permission_handler/permission_handler.dart';
 /// - Método: mounted (de State)
 /// - Método: setState (de State)
 mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
-  final BlueThermalPrinter _bluetooth = BlueThermalPrinter.instance;
+  /// Solo crear instancia de BlueThermalPrinter en Android
+  BlueThermalPrinter? get _bluetooth {
+    if (kIsWeb) return null;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return BlueThermalPrinter.instance;
+    }
+    return null;
+  }
   
   /// Lista de dispositivos Bluetooth encontrados
   List<BluetoothDevice> devices = [];
@@ -37,6 +45,18 @@ mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
 
   /// Inicializa la impresora: solicita permisos y escanea dispositivos
   Future<void> initPrinter() async {
+    final bt = _bluetooth;
+    if (bt == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Bluetooth no soportado en esta plataforma. Usa AirPrint."),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
     setLoading(true);
     try {
       // 1. Pedir permisos (Android 12+ requiere permisos extra de Bluetooth)
@@ -48,7 +68,7 @@ mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
       ].request();
 
       // 2. Verificar estado actual
-      bool? isConnected = await _bluetooth.isConnected;
+      bool? isConnected = await bt.isConnected;
       if (isConnected == true && mounted) {
         setState(() => connected = true);
       }
@@ -73,10 +93,12 @@ mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
   /// Escanea dispositivos Bluetooth emparejados
   Future<void> scanDevices() async {
     if (!mounted) return;
+    final bt = _bluetooth;
+    if (bt == null) return;
 
     setState(() => scanning = true);
     try {
-      List<BluetoothDevice> foundDevices = await _bluetooth.getBondedDevices();
+      List<BluetoothDevice> foundDevices = await bt.getBondedDevices();
       if (mounted) {
         setState(() => devices = foundDevices);
       }
@@ -107,12 +129,14 @@ mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
     setLoading(true);
 
     try {
+      final bt = _bluetooth;
+      if (bt == null) return;
       // Desconectar si ya hay una conexión activa
       if (connected) {
-        await _bluetooth.disconnect();
+        await bt.disconnect();
       }
 
-      await _bluetooth.connect(device);
+      await bt.connect(device);
 
       if (mounted) {
         setState(() => connected = true);
@@ -145,7 +169,9 @@ mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
 
     setLoading(true);
     try {
-      await _bluetooth.disconnect();
+      final bt = _bluetooth;
+      if (bt == null) return;
+      await bt.disconnect();
       if (mounted) {
         setState(() {
           connected = false;
@@ -177,7 +203,9 @@ mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
   Future<void> testPrint() async {
     if (!mounted) return;
 
-    final isConnected = await _bluetooth.isConnected;
+    final bt = _bluetooth;
+    if (bt == null) return;
+    final isConnected = await bt.isConnected;
     if (isConnected != true) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -192,11 +220,11 @@ mixin PrinterLogicMixin<T extends StatefulWidget> on State<T> {
 
     setLoading(true);
     try {
-      _bluetooth.printNewLine();
-      _bluetooth.printCustom("TEST EXITOSO", 2, 1);
-      _bluetooth.printCustom("Tu sistema esta listo.", 1, 1);
-      _bluetooth.printNewLine();
-      _bluetooth.printNewLine();
+      bt.printNewLine();
+      bt.printCustom("TEST EXITOSO", 2, 1);
+      bt.printCustom("Tu sistema esta listo.", 1, 1);
+      bt.printNewLine();
+      bt.printNewLine();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

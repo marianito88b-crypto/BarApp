@@ -20,14 +20,21 @@ class FullMenuCard extends StatefulWidget {
 
 class _FullMenuCardState extends State<FullMenuCard> {
   bool _uploading = false;
+  late final Stream<DocumentSnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(widget.placeId)
-          .snapshots(),
+      stream: _stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
         final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};

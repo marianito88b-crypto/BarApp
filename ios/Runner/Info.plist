@@ -52,6 +52,11 @@
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Necesitamos tu ubicación para encontrar bares cercanos y ofrecerte una experiencia personalizada incluso cuando la aplicación no está en primer plano.</string>
     
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>BarApp necesita Bluetooth para conectarse a impresoras térmicas y enviar comandas a cocina.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>BarApp necesita Bluetooth para conectarse a impresoras térmicas y enviar comandas a cocina.</string>
+    
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>UIBackgroundModes</key>

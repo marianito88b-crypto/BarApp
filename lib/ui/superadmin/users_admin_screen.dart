@@ -1,8 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class UsersAdminScreen extends StatelessWidget {
+class UsersAdminScreen extends StatefulWidget {
   const UsersAdminScreen({super.key});
+
+  @override
+  State<UsersAdminScreen> createState() => _UsersAdminScreenState();
+}
+
+class _UsersAdminScreenState extends State<UsersAdminScreen> {
+  late final Stream<QuerySnapshot> _usersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersStream = FirebaseFirestore.instance
+        .collection('usuarios')
+        .limit(300)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,10 +28,7 @@ class UsersAdminScreen extends StatelessWidget {
         backgroundColor: Colors.black,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('usuarios')
-            .limit(300) // Aumenté un poco el límite de visualización
-            .snapshots(),
+        stream: _usersStream,
         builder: (context, snap) {
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());

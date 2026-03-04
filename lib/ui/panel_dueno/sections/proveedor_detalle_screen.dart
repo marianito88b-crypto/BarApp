@@ -24,6 +24,9 @@ class ProveedorDetalleScreen extends StatefulWidget {
 
 class _ProveedorDetalleScreenState extends State<ProveedorDetalleScreen>
     with ProveedorLogicMixin {
+  late final Stream<DocumentSnapshot> _proveedorStream;
+  late final Stream<QuerySnapshot> _gastosStream;
+
   @override
   String get placeId => widget.placeId;
 
@@ -32,6 +35,24 @@ class _ProveedorDetalleScreenState extends State<ProveedorDetalleScreen>
 
   @override
   String get nombreProveedor => widget.nombre;
+
+  @override
+  void initState() {
+    super.initState();
+    _proveedorStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('proveedores')
+        .doc(widget.provId)
+        .snapshots();
+    _gastosStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('gastos')
+        .where('proveedorId', isEqualTo: widget.provId)
+        .orderBy('fecha', descending: true)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +79,7 @@ class _ProveedorDetalleScreenState extends State<ProveedorDetalleScreen>
         ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('places').doc(widget.placeId).collection('proveedores').doc(widget.provId).snapshots(),
+        stream: _proveedorStream,
         builder: (context, snapshot) {
           if (!snapshot.hasData || !snapshot.data!.exists) return const Center(child: CircularProgressIndicator());
           var provData = snapshot.data!.data() as Map<String, dynamic>;
@@ -100,9 +121,7 @@ class _ProveedorDetalleScreenState extends State<ProveedorDetalleScreen>
   // --- LISTADO CON ARREGLO DE ERROR "fotoUrl" ---
   Widget _buildGastosAsociados() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('places').doc(widget.placeId).collection('gastos')
-          .where('proveedorId', isEqualTo: widget.provId)
-          .orderBy('fecha', descending: true).snapshots(),
+      stream: _gastosStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         

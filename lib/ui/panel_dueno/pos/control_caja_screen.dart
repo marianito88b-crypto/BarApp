@@ -20,11 +20,22 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
   final TextEditingController _montoCtrl = TextEditingController();
   final TextEditingController _montoAjusteCtrl = TextEditingController();
   bool _loading = false;
-  double ventasEfectivo = 0;
-  double gastosEfectivo = 0;
+
+  // 🔥 FIX: Cachear el Future para evitar recreación en cada rebuild
+  Future<Map<String, double>>? _totalesFuture;
+  String? _lastSesionId; // Para detectar cambio de sesión
+
+  // 🔥 FIX: Cachear el stream de sesión abierta
+  late final Stream<QuerySnapshot> _sesionStream;
 
   @override
   String get placeId => widget.placeId;
+
+  @override
+  void initState() {
+    super.initState();
+    _sesionStream = getSesionAbiertaStream();
+  }
 
   @override
   void dispose() {
@@ -56,7 +67,7 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
       ),
       
       body: StreamBuilder<QuerySnapshot>(
-        stream: getSesionAbiertaStream(),
+        stream: _sesionStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
@@ -163,7 +174,15 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
                 }
                 
                 final String responsableEmail = user?.email ?? "Desconocido";
-                await abrirCaja(monto, responsableEmail);
+                try {
+                  await abrirCaja(monto, responsableEmail);
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Error al abrir caja: $e"), backgroundColor: Colors.red),
+                    );
+                  }
+                }
                 
                 if (mounted) {
                   setState(() { _loading = false; _montoCtrl.clear(); });
@@ -208,8 +227,14 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
     final double saldoInicial = (dataSesion['monto_inicial'] as num).toDouble();
     final Timestamp fechaAperturaTS = dataSesion['fecha_apertura'];
 
+    // 🔥 FIX: Solo recrear el Future si cambió la sesión
+    if (_totalesFuture == null || _lastSesionId != sesionDoc.id) {
+      _lastSesionId = sesionDoc.id;
+      _totalesFuture = procesarTotalesCaja(fechaAperturaTS, saldoInicial);
+    }
+
     return FutureBuilder<Map<String, double>>(
-      future: procesarTotalesCaja(fechaAperturaTS, saldoInicial),
+      future: _totalesFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -221,10 +246,10 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
         final double ventasDigital = totales['ventasDigital']!;
         final double gastosEfectivoTemp = totales['gastosEfectivo']!;
         final double totalEsperadoEnCaja = totales['totalEsperadoEnCaja']!;
-        
-        // Guardar valores para usar en el cierre
-        ventasEfectivo = ventasEfectivoTemp;
-        gastosEfectivo = gastosEfectivoTemp;
+
+        // Usar valores locales directamente (sin mutar state en builder)
+        final double ventasEfectivo = ventasEfectivoTemp;
+        final double gastosEfectivo = gastosEfectivoTemp;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -443,7 +468,9 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
                             placeId: widget.placeId,
                             tipoRetiro: 'gasto_casual',
                           ),
-                        );
+                        ).then((_) {
+                          if (mounted) setState(() => _totalesFuture = null);
+                        });
                       },
                       icon: const Icon(Icons.money_off, color: Colors.redAccent, size: 18),
                       label: const Text(
@@ -479,7 +506,9 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
                             placeId: widget.placeId,
                             tipoRetiro: 'caja_fuerte',
                           ),
-                        );
+                        ).then((_) {
+                          if (mounted) setState(() => _totalesFuture = null);
+                        });
                       },
                       icon: const Icon(Icons.account_balance, color: Colors.amberAccent, size: 18),
                       label: const Text(
@@ -622,6 +651,8 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
                           _confirmarCierre(
                             sesionDoc.id,
                             totalEsperadoEnCaja,
+                            ventasEfectivo,
+                            gastosEfectivo,
                           );
                         },
                   child: _loading
@@ -651,7 +682,7 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
     );
   }
 
-  void _confirmarCierre(String sesionId, double esperado) {
+  void _confirmarCierre(String sesionId, double esperado, double ventasEfectivo, double gastosEfectivo) {
     // Calcular ajuste de caja chica si fue ingresado
     double ajusteCajaChica = 0;
     if (_montoAjusteCtrl.text.trim().isNotEmpty) {
@@ -705,15 +736,23 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
               
               double diferencia = real - esperadoAjustado;
 
-              await cerrarCaja(sesionId, real, esperadoAjustado);
-              
-              if(mounted) {
-                setState(() { 
-                  _loading = false; 
-                  _montoCtrl.clear(); 
-                  _montoAjusteCtrl.clear();
-                });
-                _mostrarResultadoCierre(diferencia);
+              try {
+                await cerrarCaja(sesionId, real, esperadoAjustado);
+                if(mounted) {
+                  setState(() { 
+                    _loading = false; 
+                    _montoCtrl.clear(); 
+                    _montoAjusteCtrl.clear();
+                  });
+                  _mostrarResultadoCierre(diferencia);
+                }
+              } catch (e) {
+                if (mounted) {
+                  setState(() => _loading = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error al cerrar caja: $e'), backgroundColor: Colors.redAccent),
+                  );
+                }
               }
             }, 
             child: const Text("CERRAR TURNO")

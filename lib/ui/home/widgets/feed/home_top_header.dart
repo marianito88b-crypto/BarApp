@@ -3,11 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:barapp/services/guest_guard.dart';
 import 'glass_icon_button.dart';
+import 'package:barapp/ui/widgets/user_avatar.dart';
 
 /// Header superior del feed con perfil y botones de acción
 /// 
 /// Maneja los botones premium y el perfil del usuario
-class HomeTopHeader extends StatelessWidget {
+class HomeTopHeader extends StatefulWidget {
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenChat;
   final VoidCallback onOpenSettings;
@@ -24,6 +25,25 @@ class HomeTopHeader extends StatelessWidget {
   });
 
   @override
+  State<HomeTopHeader> createState() => _HomeTopHeaderState();
+}
+
+class _HomeTopHeaderState extends State<HomeTopHeader> {
+  Stream<DocumentSnapshot>? _userStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _userStream = FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(uid)
+          .snapshots();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final uid = user?.uid;
@@ -35,7 +55,7 @@ class HomeTopHeader extends StatelessWidget {
           // PERFIL
           Expanded(
             child: GestureDetector(
-              onTap: onOpenProfile,
+              onTap: widget.onOpenProfile,
               child: Row(
                 children: [
                   Container(
@@ -45,10 +65,7 @@ class HomeTopHeader extends StatelessWidget {
                     ),
                     child: uid != null
                         ? StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection('usuarios')
-                                .doc(uid)
-                                .snapshots(),
+                            stream: _userStream,
                             builder: (context, snapshot) {
                               String? photoUrl;
                               if (snapshot.hasData && snapshot.data!.exists) {
@@ -57,25 +74,13 @@ class HomeTopHeader extends StatelessWidget {
                                 photoUrl = data?['imageUrl'];
                               }
                               photoUrl ??= user?.photoURL;
-                              return CircleAvatar(
+                              return UserAvatar(
+                                imageUrl: photoUrl,
                                 radius: 18,
-                                backgroundColor: const Color(0xFF1E1E1E),
-                                backgroundImage: (photoUrl != null &&
-                                        photoUrl.isNotEmpty)
-                                    ? NetworkImage(photoUrl)
-                                    : null,
-                                child: (photoUrl == null || photoUrl.isEmpty)
-                                    ? const Icon(Icons.person_rounded,
-                                        color: Colors.white54, size: 20)
-                                    : null,
                               );
                             },
                           )
-                        : const CircleAvatar(
-                            radius: 18,
-                            backgroundColor: Color(0xFF1E1E1E),
-                            child: Icon(Icons.person, color: Colors.white54),
-                          ),
+                        : const UserAvatar(radius: 18),
                   ),
                   const SizedBox(width: 10),
                   Flexible(
@@ -112,7 +117,7 @@ class HomeTopHeader extends StatelessWidget {
             icon: Icons.receipt_long_rounded,
             color: const Color(0xFFFF9F1C), // Borde Naranja
             tooltip: 'Mis Pedidos',
-            onTap: () => GuestGuard.run(context, action: onOpenOrders),
+            onTap: () => GuestGuard.run(context, action: widget.onOpenOrders),
           ),
           const SizedBox(width: 8),
 
@@ -120,7 +125,7 @@ class HomeTopHeader extends StatelessWidget {
             icon: Icons.groups_2_rounded,
             color: const Color(0xFF2EC4B6), // Borde Turquesa
             tooltip: 'Conectados',
-            onTap: () => GuestGuard.run(context, action: onOpenConnected),
+            onTap: () => GuestGuard.run(context, action: widget.onOpenConnected),
           ),
           const SizedBox(width: 8),
 
@@ -128,7 +133,7 @@ class HomeTopHeader extends StatelessWidget {
             icon: Icons.chat_bubble_rounded,
             color: const Color(0xFFCB6CE6), // Borde Violeta
             tooltip: 'Mensajes',
-            onTap: () => GuestGuard.run(context, action: onOpenChat),
+            onTap: () => GuestGuard.run(context, action: widget.onOpenChat),
           ),
           const SizedBox(width: 8),
 
@@ -136,7 +141,7 @@ class HomeTopHeader extends StatelessWidget {
             icon: Icons.settings_rounded,
             color: Colors.blueGrey.shade200, // Borde Plata
             tooltip: 'Configuración',
-            onTap: onOpenSettings,
+            onTap: widget.onOpenSettings,
           ),
         ],
       ),

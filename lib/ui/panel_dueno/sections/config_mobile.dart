@@ -16,6 +16,17 @@ class _ConfigMobileState extends State<ConfigMobile> with ConfigLogicMixin {
   @override
   String get placeId => widget.placeId;
 
+  late final Stream<DocumentSnapshot> _placeStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placeStream = FirebaseFirestore.instance
+        .collection("places")
+        .doc(widget.placeId)
+        .snapshots();
+  }
+
   @override
   void dispose() {
     disposeConfigLogic();
@@ -27,11 +38,7 @@ class _ConfigMobileState extends State<ConfigMobile> with ConfigLogicMixin {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: StreamBuilder<DocumentSnapshot>(
-        stream:
-            FirebaseFirestore.instance
-                .collection("places")
-                .doc(widget.placeId)
-                .snapshots(),
+        stream: _placeStream,
         builder: (context, snap) {
           if (!snap.hasData) {
             return const Center(

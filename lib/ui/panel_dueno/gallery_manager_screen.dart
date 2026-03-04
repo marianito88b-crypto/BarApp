@@ -13,8 +13,19 @@ class GalleryManagerScreen extends StatefulWidget {
 
 class _GalleryManagerScreenState extends State<GalleryManagerScreen>
     with GalleryLogicMixin {
+  late final Stream<DocumentSnapshot> _placesStream;
+
   @override
   String get placeId => widget.placeId;
+
+  @override
+  void initState() {
+    super.initState();
+    _placesStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,11 +62,7 @@ class _GalleryManagerScreenState extends State<GalleryManagerScreen>
           // GRILLA DE FOTOS
           Expanded(
             child: StreamBuilder<DocumentSnapshot>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('places')
-                      .doc(widget.placeId)
-                      .snapshots(),
+              stream: _placesStream,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());

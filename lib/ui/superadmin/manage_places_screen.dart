@@ -2,8 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'place_detail_admin_screen.dart';
 
-class ManagePlacesScreen extends StatelessWidget {
+class ManagePlacesScreen extends StatefulWidget {
   const ManagePlacesScreen({super.key});
+
+  @override
+  State<ManagePlacesScreen> createState() => _ManagePlacesScreenState();
+}
+
+class _ManagePlacesScreenState extends State<ManagePlacesScreen> {
+  late final Stream<QuerySnapshot> _placesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placesStream = FirebaseFirestore.instance.collection('places').snapshots();
+  }
 
   // Lógica centralizada: ¿Está activo el periodo de prueba?
   bool _isTrialActive(dynamic fechaInicio) {
@@ -18,7 +31,7 @@ class ManagePlacesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // 1. StreamBuilder PRIMERO para tener los datos antes de armar los Tabs
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('places').snapshots(),
+      stream: _placesStream,
       builder: (context, snap) {
         if (snap.hasError) return Scaffold(body: Center(child: Text('Error: ${snap.error}')));
         if (!snap.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));

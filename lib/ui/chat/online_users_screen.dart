@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:barapp/ui/widgets/user_avatar.dart';
 
 import '../user/user_profile_screen.dart';
 
@@ -16,6 +17,16 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
   String _searchText = '';
   final Set<String> _preloadedImages = {};
   bool _isPreloading = false;
+  late final Stream<QuerySnapshot> _usersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersStream = FirebaseFirestore.instance
+        .collection('usuarios')
+        .orderBy('ultimaVezOnline', descending: true)
+        .snapshots();
+  }
 
   // Header simple
   Widget _buildHeader(String title, Color color) {
@@ -63,9 +74,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
     }
 
     _isPreloading = false;
-    if (mounted) {
-      setState(() {}); // Actualizar UI para mostrar imágenes precargadas
-    }
+    // No llamamos setState: CachedNetworkImage gestiona su propio cache
   }
 
   @override
@@ -101,11 +110,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
           // LISTA DE USUARIOS
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('usuarios')
-                  // Opcional: Podrías ordenar por última vez conectado
-                  .orderBy('ultimaVezOnline', descending: true) 
-                  .snapshots(),
+              stream: _usersStream,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -246,60 +251,34 @@ class UserStatusTile extends StatelessWidget {
   });
 
   Widget _buildAvatar() {
-    if (user.imageUrl.isEmpty) {
-      return Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: user.isOnline 
-              ? Border.all(color: Colors.greenAccent, width: 2) 
-              : null,
-        ),
-        child: CircleAvatar(
-          radius: 20,
-          backgroundColor: Colors.grey[800],
-          child: Icon(Icons.person, color: Colors.grey[400], size: 20),
-        ),
-      );
-    }
-
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: user.isOnline 
-            ? Border.all(color: Colors.greenAccent, width: 2) 
+        border: user.isOnline
+            ? Border.all(color: Colors.greenAccent, width: 2)
             : null,
       ),
-      child: ClipOval(
-        child: CachedNetworkImage(
-          imageUrl: user.imageUrl,
-          width: 40,
-          height: 40,
-          fit: BoxFit.cover,
-          // Optimizar tamaño en memoria (40 * 2 para retina = 80)
-          memCacheWidth: 80,
-          memCacheHeight: 80,
-          // Placeholder con shimmer mientras carga
-          placeholder: (context, url) => Shimmer.fromColors(
-            baseColor: Colors.grey[800]!,
-            highlightColor: Colors.grey[700]!,
-            child: Container(
-              width: 40,
-              height: 40,
-              color: Colors.grey[800],
+      child: user.imageUrl.isEmpty
+          ? UserAvatar(imageUrl: null, radius: 20)
+          : ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: user.imageUrl,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                memCacheWidth: 80,
+                memCacheHeight: 80,
+                placeholder: (context, url) => Shimmer.fromColors(
+                  baseColor: Colors.grey[800]!,
+                  highlightColor: Colors.grey[700]!,
+                  child: Container(width: 40, height: 40, color: Colors.grey[800]),
+                ),
+                errorWidget: (context, url, error) =>
+                    UserAvatar(imageUrl: null, radius: 20),
+                fadeInDuration: const Duration(milliseconds: 300),
+                fadeOutDuration: const Duration(milliseconds: 100),
+              ),
             ),
-          ),
-          // Error widget
-          errorWidget: (context, url, error) => Container(
-            width: 40,
-            height: 40,
-            color: Colors.grey[800],
-            child: Icon(Icons.person, color: Colors.grey[400], size: 20),
-          ),
-          // Fade-in animation suave
-          fadeInDuration: const Duration(milliseconds: 300),
-          fadeOutDuration: const Duration(milliseconds: 100),
-        ),
-      ),
     );
   }
 

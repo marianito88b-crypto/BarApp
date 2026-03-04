@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../client_orders_screen.dart';
 import '../../../services/barpoints_service.dart';
+import '../../../services/coupons_service.dart';
 
 /// Mixin que contiene la lógica de negocio para el proceso de checkout
 ///
@@ -209,16 +210,22 @@ mixin CheckoutLogicMixin<T extends StatefulWidget> on State<T> {
         return null;
       }
 
+      // Redondeo seguro a 2 decimales (evita errores en pasarelas de pago)
+      final totalRedondeado = _redondearMoneda(total);
+      final subtotalRedondeado = _redondearMoneda(subtotal);
+      final descuentoRedondeado = discountAmount != null ? _redondearMoneda(discountAmount) : 0.0;
+      final envioRedondeado = _redondearMoneda(isDelivery ? shippingCost : 0);
+
       final orderData = {
         'userId': user.uid,
         'clienteNombre': userName,
         'placeId': placeId,
         'placeName': placeName,
         'items': itemsProcesados,
-        'total': total,
+        'total': totalRedondeado,
         'clienteTelefono': phoneSanitized, // Usar el número sanitizado
-        'costoEnvio': isDelivery ? shippingCost : 0,
-        'totalComida': subtotal,
+        'costoEnvio': envioRedondeado,
+        'totalComida': subtotalRedondeado,
         'metodoEntrega': isDelivery ? 'delivery' : 'retiro',
         'direccion': isDelivery ? address : null,
         'metodoPago': paymentMethod,
@@ -236,21 +243,39 @@ mixin CheckoutLogicMixin<T extends StatefulWidget> on State<T> {
         // CUPÓN DE DESCUENTO (si se aplicó)
         // ============================================================
         if (discountCode != null && discountCode.isNotEmpty) 'codigoDescuento': discountCode,
-        if (discountAmount != null && discountAmount > 0) 'descuentoAplicado': discountAmount,
+        if (descuentoRedondeado > 0) 'descuentoAplicado': descuentoRedondeado,
         if (discountPorcentaje != null) 'descuentoPorcentaje': discountPorcentaje,
         if (origenBarpoints) 'origenBarpoints': true,
+        // Almacenamos cuponId para que finalizeAndMoveToSales detecte que ya fue
+        // registrado atómicamente al crear el pedido y no duplique cupones_usados.
+        if (cuponId != null) 'cuponId': cuponId,
       };
 
-      // Guardar en Firestore
-      final orderDocRef = await FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('orders')
-          .add(orderData);
+      String? orderId;
 
-      final orderId = orderDocRef.id;
+      final useCupon = (discountCode != null && discountCode.isNotEmpty && cuponId != null);
 
-      if (mounted) {
+      if (useCupon) {
+        // TRANSACCIÓN ATÓMICA: crear pedido + marcar cupón usado + registrar uso
+        // Previene doble gasto si dos pedidos se envían simultáneamente con el mismo cupón
+        orderId = await _submitOrderWithCuponAtomically(
+          placeId: placeId,
+          userId: user.uid,
+          orderData: orderData,
+          discountCode: discountCode,
+          cuponId: cuponId,
+          discountAmount: descuentoRedondeado,
+        );
+      } else {
+        final orderDocRef = await FirebaseFirestore.instance
+            .collection('places')
+            .doc(placeId)
+            .collection('orders')
+            .add(orderData);
+        orderId = orderDocRef.id;
+      }
+
+      if (orderId != null && mounted) {
         // Feedback Visual Rápido
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -281,6 +306,80 @@ mixin CheckoutLogicMixin<T extends StatefulWidget> on State<T> {
         );
       }
       return null;
+    }
+  }
+
+  /// Redondea un monto a 2 decimales para evitar errores de precisión flotante
+  static double _redondearMoneda(double value) {
+    return (value * 100).round() / 100;
+  }
+
+  /// Transacción atómica: crea el pedido y marca el cupón como usado en una sola operación.
+  /// Previene doble gasto de cupones.
+  static Future<String?> _submitOrderWithCuponAtomically({
+    required String placeId,
+    required String userId,
+    required Map<String, dynamic> orderData,
+    required String discountCode,
+    required String cuponId,
+    required double discountAmount,
+  }) async {
+    final db = FirebaseFirestore.instance;
+    final orderRef = db.collection('places').doc(placeId).collection('orders').doc();
+
+    DocumentReference<Map<String, dynamic>>? userRef;
+    for (final col in ['usuarios', 'users']) {
+      final ref = db.collection(col).doc(userId);
+      if ((await ref.get()).exists) {
+        userRef = ref;
+        break;
+      }
+    }
+    if (userRef == null) return null;
+
+    final cuponRef = userRef.collection('mis_cupones').doc(cuponId);
+
+    try {
+      await db.runTransaction((tx) async {
+        // 1. Verificar que el cupón existe, NO está usado y es válido para este bar
+        final cuponSnap = await tx.get(cuponRef);
+        if (!cuponSnap.exists) {
+          throw Exception('Cupón no encontrado');
+        }
+        final cuponData = cuponSnap.data();
+        if (cuponData == null || (cuponData['usado'] as bool? ?? false)) {
+          throw Exception('Este cupón ya fue utilizado');
+        }
+        // Exclusividad de venue: cupones de regalo solo en el bar que los emitió
+        final cuponVenueId = cuponData['venueId'] as String? ?? cuponData['placeId'] as String?;
+        if (cuponVenueId != null &&
+            cuponVenueId.isNotEmpty &&
+            cuponVenueId != placeId) {
+          throw Exception('Este cupón no es válido para este local');
+        }
+
+        // 2. Crear pedido
+        tx.set(orderRef, orderData);
+
+        // 3. Marcar cupón como usado
+        tx.update(cuponRef, {
+          'usado': true,
+          'usadoEn': FieldValue.serverTimestamp(),
+        });
+
+        // 4. Registrar uso en cupones_usados (evita reutilización)
+        tx.set(userRef!.collection('cupones_usados').doc(), {
+          'codigo': CouponsService.normalizarCodigo(discountCode),
+          'orderId': orderRef.id,
+          'placeId': placeId,
+          'descuentoAplicado': discountAmount,
+          'usadoEn': FieldValue.serverTimestamp(),
+        });
+      });
+      return orderRef.id;
+    } catch (e) {
+      debugPrint('Error en transacción pedido+cupón: $e');
+      rethrow;
     }
   }
 }

@@ -16,6 +16,18 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+  late final Stream<QuerySnapshot> _chatsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _chatsStream = FirebaseFirestore.instance
+        .collection('usuarios')
+        .doc(currentUserId)
+        .collection('chats')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +42,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         elevation: 0,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(currentUserId)
-            .collection('chats')
-            .orderBy('timestamp', descending: true)
-            .snapshots(),
+        stream: _chatsStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) return const Center(child: Text("Error al cargar chats", style: TextStyle(color: Colors.white)));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.orangeAccent));
@@ -115,7 +122,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   String _formatTime(DateTime date) {
     final now = DateTime.now();
-    if (now.day == date.day) return DateFormat('HH:mm').format(date);
+    if (now.year == date.year && now.month == date.month && now.day == date.day) {
+      return DateFormat('HH:mm').format(date);
+    }
     return DateFormat('dd/MM').format(date);
   }
 

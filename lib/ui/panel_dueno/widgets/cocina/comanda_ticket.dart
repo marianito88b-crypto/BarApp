@@ -25,12 +25,13 @@ class ComandaTicket extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = doc.data() as Map<String, dynamic>;
     final items = List<Map<String, dynamic>>.from(data['items'] ?? []);
+    final bool canceladoPorMozo = data['estado'] == 'cancelado_por_mozo';
     
     // Soporte para ambos nombres de timestamp
     final Timestamp? ts = data['createdAt'] ?? data['timestamp'];
     final DateTime fecha = ts != null ? ts.toDate() : DateTime.now();
     
-    final colorBorde = _getColorPorTiempo(fecha);
+    final colorBorde = canceladoPorMozo ? Colors.redAccent : _getColorPorTiempo(fecha);
 
     // 🔥 CORRECCIÓN AQUÍ: PRIORIZAMOS LA MESA
     // Si viene de una mesa, usamos 'mesaNombre'. Si es Delivery, usamos 'clienteNombre'.
@@ -116,6 +117,31 @@ class ComandaTicket extends StatelessWidget {
             ),
           ),
           
+          if (canceladoPorMozo)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.3),
+                border: Border.all(color: Colors.redAccent, width: 2),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.cancel, color: Colors.redAccent, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    "¡PEDIDO CANCELADO POR EL MOZO!",
+                    style: TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (data['notas'] != null && data['notas'].toString().trim().isNotEmpty)
             Container(
               padding: const EdgeInsets.all(8),
@@ -197,27 +223,32 @@ class ComandaTicket extends StatelessWidget {
             ),
           ),
 
-          // 3. FOOTER
+          // 3. FOOTER (Despachar o Archivar si cancelado)
           Container(
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: Colors.white10))),
             child: InkWell(
-              onTap: () => _despacharConSeguridad(context, data),
+              onTap: () => canceladoPorMozo
+                  ? _archivarCancelado(context)
+                  : _despacharConSeguridad(context, data),
               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               child: Container(
                 height: 55,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: Colors.greenAccent,
-                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                decoration: BoxDecoration(
+                  color: canceladoPorMozo ? Colors.grey : Colors.greenAccent,
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.check_circle_outline, color: Colors.black),
+                    Icon(
+                      canceladoPorMozo ? Icons.archive : Icons.check_circle_outline,
+                      color: Colors.black,
+                    ),
                     const SizedBox(width: 8),
-                    const Text(
-                      "DESPACHAR",
-                      style: TextStyle(
+                    Text(
+                      canceladoPorMozo ? "ARCHIVAR" : "DESPACHAR",
+                      style: const TextStyle(
                         color: Colors.black,
                         fontWeight: FontWeight.w900,
                         fontSize: 16,
@@ -232,6 +263,37 @@ class ComandaTicket extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Archiva un pedido cancelado para limpiar la vista del chef
+  Future<void> _archivarCancelado(BuildContext context) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection("places")
+          .doc(placeId)
+          .collection("orders")
+          .doc(doc.id)
+          .update({
+        'estado': 'archivado',
+        'archivadoAt': FieldValue.serverTimestamp(),
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Pedido archivado"),
+            backgroundColor: Colors.grey,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error archivando: $e");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("❌ Error al archivar"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   /// Despacha una comanda con seguridad usando batch de Firestore

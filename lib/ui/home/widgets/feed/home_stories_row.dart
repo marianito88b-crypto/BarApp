@@ -26,7 +26,7 @@ class StoryGroup {
 /// 
 /// Muestra el botón de agregar historia y las historias agrupadas por usuario
 /// (similar a Instagram - un círculo por usuario con todas sus historias)
-class HomeStoriesRow extends StatelessWidget {
+class HomeStoriesRow extends StatefulWidget {
   final Color accent;
   final VoidCallback onAdd;
   final void Function(StoryItem story, int index, List<StoryItem> allStories)
@@ -40,16 +40,29 @@ class HomeStoriesRow extends StatelessWidget {
   });
 
   @override
+  State<HomeStoriesRow> createState() => _HomeStoriesRowState();
+}
+
+class _HomeStoriesRowState extends State<HomeStoriesRow> {
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _storiesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _storiesStream = FirebaseFirestore.instance
+        .collection('stories')
+        .where('expiresAt', isGreaterThan: Timestamp.now())
+        .orderBy('expiresAt', descending: true)
+        .limit(100)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('stories')
-          .where('expiresAt', isGreaterThan: Timestamp.now())
-          .orderBy('expiresAt', descending: true)
-          .limit(100) // Aumentamos el límite para agrupar mejor
-          .snapshots(),
+      stream: _storiesStream,
       builder: (context, snap) {
         if (snap.hasError) {
           debugPrint('Error en Stream de Historias: ${snap.error}');
@@ -147,7 +160,7 @@ class HomeStoriesRow extends StatelessWidget {
           itemBuilder: (_, i) {
             // Primer item: botón de agregar (solo si el usuario no tiene historias)
             if (showAddButtonFirst && i == 0) {
-              return AddStoryButton(onTap: onAdd);
+              return AddStoryButton(onTap: widget.onAdd);
             }
 
             // Ajustar índice si hay botón de agregar al principio
@@ -162,14 +175,16 @@ class HomeStoriesRow extends StatelessWidget {
             
             // Determinar color del borde: destacada o normal
             final hasFeatured = group.stories.any((s) => s.isFeatured);
-            final borderColor = hasFeatured ? Colors.amber : accent;
+            final borderColor = hasFeatured ? Colors.amber : widget.accent;
 
             return StoryCircleWidget(
               story: firstStory,
               borderColor: borderColor,
+              isOwnStory: group.isOwnStory,
+              onAddStory: group.isOwnStory ? widget.onAdd : null,
               onTap: () {
                 if (storyIndex >= 0 && storyIndex < flattenedStories.length) {
-                  onTapStory(firstStory, storyIndex, flattenedStories);
+                  widget.onTapStory(firstStory, storyIndex, flattenedStories);
                 }
               },
             );

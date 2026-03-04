@@ -9,7 +9,7 @@ import 'client_ratings_modal.dart';
 /// Al hacer tap, abre ClientRatingsModal con el detalle completo.
 ///
 /// Intenta leer de 'usuarios' primero y luego de 'users'.
-class ClientReputationCard extends StatelessWidget {
+class ClientReputationCard extends StatefulWidget {
   final String? userId;
 
   const ClientReputationCard({
@@ -18,13 +18,29 @@ class ClientReputationCard extends StatelessWidget {
   });
 
   @override
+  State<ClientReputationCard> createState() => _ClientReputationCardState();
+}
+
+class _ClientReputationCardState extends State<ClientReputationCard> {
+  late final String? _currentUserId;
+  late final Future<String>? _collectionFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUserId = widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
+    _collectionFuture = _currentUserId != null
+        ? _resolveCollection(_currentUserId)
+        : null;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final currentUserId = userId ?? FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserId == null) return const SizedBox.shrink();
+    if (_currentUserId == null) return const SizedBox.shrink();
 
     // Intentar con 'usuarios'; si vacío usará 'users' via FutureBuilder
     return FutureBuilder<String>(
-      future: _resolveCollection(currentUserId),
+      future: _collectionFuture,
       builder: (context, futureSnap) {
         if (!futureSnap.hasData) return const SizedBox.shrink();
         final collection = futureSnap.data!;
@@ -32,7 +48,7 @@ class ClientReputationCard extends StatelessWidget {
         return StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
               .collection(collection)
-              .doc(currentUserId)
+              .doc(_currentUserId)
               .snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return const SizedBox.shrink();
@@ -56,7 +72,7 @@ class ClientReputationCard extends StatelessWidget {
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               child: InkWell(
-                onTap: () => ClientRatingsModal.show(context, currentUserId),
+                onTap: () => ClientRatingsModal.show(context, _currentUserId),
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   padding: const EdgeInsets.all(16),

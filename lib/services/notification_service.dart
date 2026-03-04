@@ -5,7 +5,9 @@ import 'package:universal_io/io.dart';
 import 'package:flutter/foundation.dart'; 
 import 'package:flutter/material.dart'; // Necesario para MaterialPageRoute
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -15,9 +17,26 @@ import 'package:barapp/main.dart';
 import 'package:barapp/ui/events/events_screen.dart';
 import 'package:barapp/ui/place/place_detail_screen.dart';
 import 'package:barapp/ui/chat/chat_screen.dart';
+import 'package:barapp/ui/muro/community_wall_screen.dart';
+import 'package:barapp/ui/user/widgets/profile/modals/my_gifts_modal.dart';
+import 'package:barapp/ui/home_shell.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+
+  /// Resetea el badge del icono de la app a cero.
+  /// Anti-bug: elimina el "1" fantasma al abrir la app o ver regalos.
+  static Future<void> clearBadge() async {
+    if (kIsWeb) return;
+    try {
+      final supported = await AppBadgePlus.isSupported();
+      if (supported) {
+        await AppBadgePlus.updateBadge(0);
+      }
+    } catch (e) {
+      debugPrint("⚠️ Error limpiando badge: $e");
+    }
+  }
 
   static Future<void> init() async {
     if (kIsWeb) return;
@@ -33,52 +52,78 @@ class NotificationService {
       },
     );
 
+    await clearBadge();
+
     // NOTA: No necesitamos escuchar onMessage aquí si ya lo llamamos desde main.dart
     // Pero si lo dejas no pasa nada, solo asegúrate de no duplicar notificaciones.
+  }
+
+  /// Procesa el tap en notificación (local o abriendo app).
+  /// Solo navega si el usuario está autenticado.
+  static void handleNotificationNavigation(Map<String, dynamic> data) {
+    clearBadge();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final String? type = data['type'];
+    final String? screen = data['screen'];
+    final String? id = data['id'];
+    final String? extraName = data['extraName'];
+
+    if (screen == 'my_gifts') {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) MyGiftsModal.show(ctx, user.uid);
+      return;
+    }
+
+    if (screen == 'community_wall') {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => const CommunityWallScreen()),
+      );
+      return;
+    }
+
+    if (screen == 'story_viewer') {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => const HomeShell()),
+      );
+      return;
+    }
+
+    if (type == 'event') {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => const EventsScreen()),
+      );
+      return;
+    }
+
+    if (id != null) {
+      if (type == 'bar_detail') {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(builder: (_) => PlaceDetailScreen(placeId: id)),
+        );
+      } else if (type == 'chat') {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              otherUserId: id,
+              otherDisplayName: extraName ?? 'Chat',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   // 5. NUEVA FUNCIÓN: Qué hacer al tocar la notificación LOCAL (App abierta)
   static void _onNotificationTap(NotificationResponse response) {
     final String? payload = response.payload;
-    
+
     if (payload != null && payload.isNotEmpty) {
       try {
-        // 1. Decodificamos el JSON
         final Map<String, dynamic> data = jsonDecode(payload);
-        
-        // 2. EXTRAEMOS TODAS LAS VARIABLES (Aquí estaba el error antes)
-        final String? type = data['type'];
-        final String? id = data['id'];              // <--- Faltaba definir esto
-        final String? extraName = data['extraName']; // <--- Y esto
-
-        debugPrint("🔔 Tap en notificación local -> Tipo: $type | ID: $id");
-
-        // 3. CASO EVENTOS (Prioridad: No necesita ID)
-        if (type == 'event') {
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(builder: (_) => const EventsScreen()),
-          );
-          return; // Cortamos aquí
-        }
-
-        // 4. CASOS QUE REQUIEREN ID (Lugares y Chats)
-        if (id != null) {
-          if (type == 'bar_detail') {
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(builder: (_) => PlaceDetailScreen(placeId: id)),
-            );
-          } else if (type == 'chat') {
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (_) => ChatScreen(
-                  otherUserId: id, 
-                  otherDisplayName: extraName ?? 'Chat',
-                ),
-              ),
-            );
-          }
-        }
-
+        debugPrint("🔔 Tap en notificación local -> screen: ${data['screen']} | type: ${data['type']}");
+        handleNotificationNavigation(data);
       } catch (e) {
         debugPrint("Error al procesar click de notificación local: $e");
       }

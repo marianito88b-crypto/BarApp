@@ -1,7 +1,7 @@
-// ignore_for_file: use_build_context_synchronously
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:barapp/ui/panel_dueno/logic/mesas_logic.dart';
 import 'package:barapp/ui/panel_dueno/widgets/pos/pos_utils.dart';
 import 'package:barapp/ui/panel_dueno/pos/modal_procesar_pago.dart';
 import 'package:barapp/services/printer/printer_service.dart';
@@ -34,9 +34,29 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
   // Suscripción de Firestore para cancelarla en dispose
   StreamSubscription<QuerySnapshot>? _pedidoSubscription;
 
+  // Stream cacheado del menú para evitar re-creación en cada build
+  late final Stream<QuerySnapshot> menuStream;
+
+  // Stream cacheado de la mesa para evitar re-creación en cada build
+  late final Stream<DocumentSnapshot> mesaStream;
+
   /// Inicializa la lógica del POS y carga el pedido existente
   void initTomaPedidoLogic() {
+    debugPrint('🟢 initTomaPedidoLogic: placeId=$placeId mesaId=$mesaId');
+    menuStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(placeId)
+        .collection('menu')
+        .orderBy('categoria')
+        .snapshots();
+    mesaStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(placeId)
+        .collection('mesas')
+        .doc(mesaId)
+        .snapshots();
     _cargarPedidoExistente();
+    debugPrint('🟢 initTomaPedidoLogic: streams cacheados OK');
   }
 
   /// Carga el pedido existente desde Firestore y mantiene una suscripción en tiempo real
@@ -50,12 +70,12 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
         .orderBy('timestamp', descending: true)
         .snapshots()
         .listen((snap) {
+      debugPrint('🟡 cuenta_items: ${snap.docs.length} docs recibidos');
       double tempTotal = 0;
       List<Map<String, dynamic>> tempItems = [];
 
       for (var doc in snap.docs) {
-        final data = doc.data();
-        data['docId'] = doc.id;
+        final data = {...doc.data(), 'docId': doc.id};
         double precio = PosUtils.safeDouble(data['precio']);
         int cant = PosUtils.safeInt(data['cantidad']);
         tempTotal += (precio * cant);
@@ -68,6 +88,8 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
           setTotalHistorico(tempTotal);
         });
       }
+    }, onError: (e) {
+      debugPrint('❌ Error en cuenta_items stream: $e');
     });
   }
 
@@ -420,6 +442,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
           .get();
 
       if (cajaQuery.docs.isEmpty) {
+        if (!mounted) return;
         setState(() => setGuardando(false));
         _mostrarAlertaCajaCerrada();
         return;
@@ -472,7 +495,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
           mesasACobrar = [mesaId, ...mesasRelacionadas.map((m) => m['id'] as String)];
           // Usar el total unificado para el modal de pago
           if (!context.mounted) return;
-          final List<Map<String, dynamic>>? resultadoPagos = await showDialog(
+          final Map<String, dynamic>? pagoResultUnif = await showDialog(
             context: context,
             builder: (ctx) => ModalProcesarPago(
               totalAPagar: totalUnificado,
@@ -480,17 +503,31 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
             ),
           );
 
-          if (resultadoPagos == null || resultadoPagos.isEmpty) return;
+          if (pagoResultUnif == null || (pagoResultUnif['pagos'] as List).isEmpty) return;
+
+          final List<Map<String, dynamic>> resultadoPagosUnif =
+              List<Map<String, dynamic>>.from(pagoResultUnif['pagos'] as List);
+          final double totalFinalUnif =
+              (pagoResultUnif['totalFinal'] as num?)?.toDouble() ?? totalUnificado;
+          final double descuentoUnif =
+              (pagoResultUnif['descuentoAplicado'] as num?)?.toDouble() ?? 0.0;
+          final String? codigoUnif = pagoResultUnif['codigoAplicado'] as String?;
 
           if (!context.mounted) return;
-          await _cobrarCuentasUnificadas(mesasACobrar, totalUnificado, resultadoPagos);
+          await _cobrarCuentasUnificadas(
+            mesasACobrar,
+            totalFinalUnif,
+            resultadoPagosUnif,
+            descuento: descuentoUnif,
+            codigoDescuento: codigoUnif,
+          );
           return;
         }
       }
 
       // Cobro individual (comportamiento original)
       if (!context.mounted) return;
-      final List<Map<String, dynamic>>? resultadoPagos = await showDialog(
+      final Map<String, dynamic>? pagoResult = await showDialog(
         context: context,
         builder: (ctx) => ModalProcesarPago(
           totalAPagar: totalGeneral,
@@ -498,10 +535,23 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
         ),
       );
 
-      if (resultadoPagos == null || resultadoPagos.isEmpty) return;
+      if (pagoResult == null || (pagoResult['pagos'] as List).isEmpty) return;
+
+      final List<Map<String, dynamic>> resultadoPagos =
+          List<Map<String, dynamic>>.from(pagoResult['pagos'] as List);
+      final double totalFinal =
+          (pagoResult['totalFinal'] as num?)?.toDouble() ?? totalGeneral;
+      final double descuento =
+          (pagoResult['descuentoAplicado'] as num?)?.toDouble() ?? 0.0;
+      final String? codigoDescuento = pagoResult['codigoAplicado'] as String?;
 
       if (!context.mounted) return;
-      await _cobrarCuentaIndividual(totalGeneral, resultadoPagos);
+      await _cobrarCuentaIndividual(
+        totalFinal,
+        resultadoPagos,
+        descuento: descuento,
+        codigoDescuento: codigoDescuento,
+      );
     } catch (e) {
       debugPrint("Error cobrando: $e");
       if (!context.mounted) return;
@@ -518,8 +568,10 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
   /// Cobra una cuenta individual (comportamiento original)
   Future<void> _cobrarCuentaIndividual(
     double totalGeneral,
-    List<Map<String, dynamic>> resultadoPagos,
-  ) async {
+    List<Map<String, dynamic>> resultadoPagos, {
+    double descuento = 0,
+    String? codigoDescuento,
+  }) async {
     setState(() => setGuardando(true));
 
     try {
@@ -565,6 +617,9 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
         'metodoPrincipal': resultadoPagos.length > 1
             ? 'mixto'
             : resultadoPagos.first['metodo'],
+        if (descuento > 0) 'descuentoAplicado': descuento,
+        if (codigoDescuento != null && codigoDescuento.isNotEmpty)
+          'codigoDescuento': codigoDescuento,
       });
 
       final mesaRef = FirebaseFirestore.instance
@@ -646,8 +701,10 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
   Future<void> _cobrarCuentasUnificadas(
     List<String> mesasIds,
     double totalUnificado,
-    List<Map<String, dynamic>> resultadoPagos,
-  ) async {
+    List<Map<String, dynamic>> resultadoPagos, {
+    double descuento = 0,
+    String? codigoDescuento,
+  }) async {
     setState(() => setGuardando(true));
 
     try {
@@ -756,6 +813,9 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
             ? 'mixto'
             : resultadoPagos.first['metodo'],
         'cuentaUnificada': true, // Flag para identificar cuentas unificadas
+        if (descuento > 0) 'descuentoAplicado': descuento,
+        if (codigoDescuento != null && codigoDescuento.isNotEmpty)
+          'codigoDescuento': codigoDescuento,
       });
 
       await batch.commit();
@@ -896,6 +956,12 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
       });
 
       await batch.commit();
+
+      // Marcar como cancelados los pedidos que estaban en cocina (si había alguno pendiente)
+      await MesasLogicMixin.cancelarOrdenesPendientesCocina(
+        placeId: placeId,
+        mesaId: mesaId,
+      );
 
       if (mounted) Navigator.pop(context);
     } catch (e) {

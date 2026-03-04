@@ -1,26 +1,39 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class StockScreen extends StatelessWidget {
+class StockScreen extends StatefulWidget {
   final String placeId;
 
   const StockScreen({super.key, required this.placeId});
+
+  @override
+  State<StockScreen> createState() => _StockScreenState();
+}
+
+class _StockScreenState extends State<StockScreen> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('places').doc(widget.placeId)
+        .collection('menu')
+        .where('controlaStock', isEqualTo: true)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text("Control de Stock 📦", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Control de Stock \uD83D\uDCE6", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1E1E1E),
       ),
       body: StreamBuilder<QuerySnapshot>(
         // Filtramos solo los productos que SÍ controlan stock
-        stream: FirebaseFirestore.instance
-            .collection('places').doc(placeId)
-            .collection('menu')
-            .where('controlaStock', isEqualTo: true) 
-            .snapshots(),
+        stream: _stream,
         builder: (context, snap) {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: Colors.orangeAccent));
 
@@ -45,7 +58,7 @@ class StockScreen extends StatelessWidget {
                 onUpdate: (nuevoStock) {
                   // Actualizamos directo en Firebase
                   FirebaseFirestore.instance
-                      .collection('places').doc(placeId)
+                      .collection('places').doc(widget.placeId)
                       .collection('menu').doc(docId)
                       .update({'stock': nuevoStock});
                 },

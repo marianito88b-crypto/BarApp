@@ -59,7 +59,7 @@ class BarPointsService {
       await userRef.collection('historial_puntos').add({
         'concepto': concepto,
         'monto': monto,
-        'fecha': Timestamp.now(),
+        'fecha': FieldValue.serverTimestamp(), // ✅ Reloj del servidor
         if (orderId != null) 'orderId': orderId,
         if (placeId != null) 'placeId': placeId,
       });
@@ -70,7 +70,8 @@ class BarPointsService {
   }
 
   /// Acredita los puntos al usuario cuando un pedido se completa
-  /// y registra el movimiento en historial_puntos
+  /// y registra el movimiento en historial_puntos.
+  /// Usa runTransaction para verificación atómica de saldo y evitar doble acreditación.
   static Future<bool> acreditarPuntos({
     required String userId,
     required String orderId,
@@ -89,37 +90,13 @@ class BarPointsService {
           .collection('orders')
           .doc(orderId);
 
-      final orderDoc = await orderRef.get();
-      if (!orderDoc.exists) {
-        debugPrint('❌ Pedido no encontrado: $orderId');
-        return false;
-      }
-
-      final orderData = orderDoc.data();
-      if (orderData == null) return false;
-
-      final puntosAcreditados = (orderData['puntosAcreditados'] as bool?) ?? false;
-      if (puntosAcreditados) {
-        debugPrint('⚠️ Los puntos ya fueron acreditados');
-        return false;
-      }
-
       final userRef = await _resolveUserRef(userId);
       if (userRef == null) {
         debugPrint('❌ Usuario no encontrado: $userId');
         return false;
       }
 
-      final userDoc = await userRef.get();
-      final userData = userDoc.data();
-      if (userData == null) return false;
-
-      final puntosActuales = (userData['barPoints'] as num?)?.toInt() ?? 0;
-      // Cap: no acumular más de 500 puntos
-      final nuevosPuntos =
-          (puntosActuales + puntosEstimados).clamp(0, maxBarPoints);
-
-      // Nombre del lugar para el concepto
+      // Nombre del lugar (fuera de transacción, solo lectura)
       String placeNombre = 'Local';
       try {
         final placeSnap = await _db.collection('places').doc(placeId).get();
@@ -128,32 +105,53 @@ class BarPointsService {
         }
       } catch (_) {}
 
-      final concepto = 'Compra en $placeNombre';
+      await _db.runTransaction((tx) async {
+        // 1. Leer pedido DENTRO de la transacción
+        final orderSnap = await tx.get(orderRef);
+        if (!orderSnap.exists) {
+          throw Exception('Pedido no encontrado');
+        }
+        final orderData = orderSnap.data();
+        if (orderData == null) {
+          throw Exception('Pedido no encontrado');
+        }
 
-      final batch = _db.batch();
+        final puntosAcreditados = (orderData['puntosAcreditados'] as bool?) ?? false;
+        if (puntosAcreditados) {
+          throw Exception('Los puntos ya fueron acreditados');
+        }
 
-      batch.update(userRef, {'barPoints': nuevosPuntos});
+        // 2. Leer saldo usuario DENTRO de la transacción
+        final userSnap = await tx.get(userRef);
+        if (!userSnap.exists) {
+          throw Exception('Usuario no encontrado');
+        }
+        final userData = userSnap.data();
+        if (userData == null) {
+          throw Exception('Usuario no encontrado');
+        }
 
-      batch.update(orderRef, {
-        'puntosAcreditados': true,
-        'puntosAcreditadosAt': FieldValue.serverTimestamp(),
+        final puntosActuales = (userData['barPoints'] as num?)?.toInt() ?? 0;
+        final nuevosPuntos =
+            (puntosActuales + puntosEstimados).clamp(0, maxBarPoints);
+        final concepto = 'Compra en $placeNombre';
+
+        // 3. Todas las escrituras atómicas
+        tx.update(userRef, {'barPoints': nuevosPuntos});
+        tx.update(orderRef, {
+          'puntosAcreditados': true,
+          'puntosAcreditadosAt': FieldValue.serverTimestamp(),
+        });
+        tx.set(userRef.collection('historial_puntos').doc(), {
+          'concepto': concepto,
+          'monto': puntosEstimados,
+          'fecha': FieldValue.serverTimestamp(),
+          'orderId': orderId,
+          'placeId': placeId,
+        });
       });
 
-      final historialRef = userRef.collection('historial_puntos').doc();
-      batch.set(historialRef, {
-        'concepto': concepto,
-        'monto': puntosEstimados,
-        'fecha': Timestamp.now(),
-        'orderId': orderId,
-        'placeId': placeId,
-      });
-
-      await batch.commit();
-
-      debugPrint(
-        '✅ Puntos acreditados: +$puntosEstimados al usuario $userId '
-        '(Total: $puntosActuales → $nuevosPuntos)',
-      );
+      debugPrint('✅ Puntos acreditados: +$puntosEstimados al usuario $userId');
       return true;
     } catch (e) {
       debugPrint('❌ Error acreditando puntos: $e');
@@ -163,6 +161,7 @@ class BarPointsService {
 
   /// Canjea puntos por un cupón de descuento.
   /// Resta los puntos, crea el cupón en mis_cupones y registra el movimiento.
+  /// Usa runTransaction para prevenir doble gasto (dos canjes simultáneos).
   ///
   /// [userId]: ID del usuario
   /// [puntos]: Puntos a canjear (100, 250, 400 o 500)
@@ -185,79 +184,73 @@ class BarPointsService {
         return {'success': false, 'error': 'Usuario no encontrado'};
       }
 
-      final userDoc = await userRef.get();
-      final userData = userDoc.data();
-      if (userData == null) {
-        return {'success': false, 'error': 'Usuario no encontrado'};
-      }
+      String codigoCupon = '';
+      int capturedNuevosPuntos = 0; // Capturado dentro de la tx para evitar re-lectura
 
-      final puntosActuales = (userData['barPoints'] as num?)?.toInt() ?? 0;
-      if (puntosActuales < puntos) {
-        return {
-          'success': false,
-          'error': 'No tenés suficientes puntos. Tenés $puntosActuales.',
-        };
-      }
+      await _db.runTransaction((tx) async {
+        // 1. Leer saldo actual DENTRO de la transacción (verificación atómica)
+        final userSnap = await tx.get(userRef);
+        if (!userSnap.exists) {
+          throw Exception('Usuario no encontrado');
+        }
+        final userData = userSnap.data();
+        if (userData == null) {
+          throw Exception('Usuario no encontrado');
+        }
 
-      final nuevosPuntos = puntosActuales - puntos;
+        final puntosActuales = (userData['barPoints'] as num?)?.toInt() ?? 0;
+        if (puntosActuales < puntos) {
+          throw Exception('No tenés suficientes puntos. Tenés $puntosActuales.');
+        }
 
-      // Crear cupón (origen BarPoints, válido en locales adheridos)
-      final codigoCupon = await _crearCuponBarPoints(
-        userRef: userRef,
-        puntos: puntos,
-        descuentoPorcentaje: descuentoPorcentaje,
-      );
+        final nuevosPuntos = puntosActuales - puntos;
+        capturedNuevosPuntos = nuevosPuntos; // Guardar para retornar sin extra-read
 
-      final batch = _db.batch();
-      batch.update(userRef, {'barPoints': nuevosPuntos});
-      final historialRef = userRef.collection('historial_puntos').doc();
-      batch.set(historialRef, {
-        'concepto': 'Canje $puntos pts → $descuentoPorcentaje% descuento',
-        'monto': -puntos,
-        'fecha': Timestamp.now(),
+        // 2. Generar código y preparar datos del cupón
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        final r = Random.secure();
+        codigoCupon = List.generate(8, (_) => chars[r.nextInt(chars.length)]).join();
+        final vencimiento = DateTime.now().add(const Duration(hours: 24));
+
+        // 3. Todas las escrituras en la misma transacción
+        tx.update(userRef, {'barPoints': nuevosPuntos});
+
+        final historialRef = userRef.collection('historial_puntos').doc();
+        tx.set(historialRef, {
+          'concepto': 'Canje $puntos pts → $descuentoPorcentaje% descuento',
+          'monto': -puntos,
+          'fecha': FieldValue.serverTimestamp(), // ✅ Reloj del servidor (consistente con acreditarPuntos)
+        });
+
+        final cuponRef = userRef.collection('mis_cupones').doc();
+        tx.set(cuponRef, {
+          'codigo': codigoCupon,
+          'placeId': '',
+          'placeName': 'BarPoints - Locales adheridos',
+          'descuentoPorcentaje': descuentoPorcentaje.toDouble(),
+          'descripcion': 'Canje BarPoints ($puntos pts) - $descuentoPorcentaje% descuento',
+          'creadoEn': FieldValue.serverTimestamp(),
+          'usado': false,
+          'usadoEn': null,
+          'origenBarpoints': true,
+          'fechaVencimiento': Timestamp.fromDate(vencimiento),
+          'validoHasta': Timestamp.fromDate(vencimiento),
+        });
       });
 
-      await batch.commit();
-
-      debugPrint(
-        '✅ Canje: $userId usó $puntos pts → cupón $codigoCupon '
-        '($puntosActuales → $nuevosPuntos)',
-      );
+      debugPrint('✅ Canje: $userId usó $puntos pts → cupón $codigoCupon');
       return {
         'success': true,
         'codigoCupon': codigoCupon,
-        'puntosRestantes': nuevosPuntos,
+        'puntosRestantes': capturedNuevosPuntos, // ✅ Valor exacto, sin lectura extra
       };
+    } on Exception catch (e) {
+      debugPrint('❌ Error canjeando puntos: $e');
+      return {'success': false, 'error': e.toString().replaceFirst('Exception: ', '')};
     } catch (e) {
       debugPrint('❌ Error canjeando puntos: $e');
       return {'success': false, 'error': e.toString()};
     }
-  }
-
-  static Future<String> _crearCuponBarPoints({
-    required DocumentReference<Map<String, dynamic>> userRef,
-    required int puntos,
-    required int descuentoPorcentaje,
-  }) async {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final r = Random.secure();
-    final code = List.generate(8, (_) => chars[r.nextInt(chars.length)]).join();
-
-    final vencimiento = DateTime.now().add(const Duration(hours: 24));
-    await userRef.collection('mis_cupones').add({
-      'codigo': code,
-      'placeId': '', // Válido en locales adheridos
-      'placeName': 'BarPoints - Locales adheridos',
-      'descuentoPorcentaje': descuentoPorcentaje.toDouble(),
-      'descripcion': 'Canje BarPoints ($puntos pts) - $descuentoPorcentaje% descuento',
-      'creadoEn': FieldValue.serverTimestamp(),
-      'usado': false,
-      'usadoEn': null,
-      'origenBarpoints': true,
-      'fechaVencimiento': Timestamp.fromDate(vencimiento),
-      'validoHasta': Timestamp.fromDate(vencimiento),
-    });
-    return code;
   }
 
   /// Obtiene los BarPoints actuales de un usuario

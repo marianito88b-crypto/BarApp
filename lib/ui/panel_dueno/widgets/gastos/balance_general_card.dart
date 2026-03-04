@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:barapp/services/finanzas_service.dart';
 
 /// Tarjeta que muestra el balance general (Ventas - Gastos = Neto)
-class BalanceGeneralCard extends StatelessWidget {
+class BalanceGeneralCard extends StatefulWidget {
   final String placeId;
 
   const BalanceGeneralCard({
@@ -11,14 +11,29 @@ class BalanceGeneralCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final finanzas = FinanzasService(placeId: placeId);
+  State<BalanceGeneralCard> createState() => _BalanceGeneralCardState();
+}
 
+class _BalanceGeneralCardState extends State<BalanceGeneralCard> {
+  late final FinanzasService _finanzas;
+  late final Stream<double> _ingresosStream;
+  late final Stream<double> _gastosStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _finanzas = FinanzasService(placeId: widget.placeId);
+    _ingresosStream = _finanzas.getIngresosMensuales();
+    _gastosStream = _finanzas.getGastosMensuales();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<double>(
-      stream: finanzas.getIngresosMensuales(),
+      stream: _ingresosStream,
       builder: (context, snapshotIngresos) {
         return StreamBuilder<double>(
-          stream: finanzas.getGastosMensuales(),
+          stream: _gastosStream,
           builder: (context, snapshotGastos) {
             double ingresos = snapshotIngresos.data ?? 0.0;
             double gastos = snapshotGastos.data ?? 0.0;

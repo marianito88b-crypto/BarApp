@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:barapp/services/finanzas_service.dart';
 
 /// Vista del gráfico de torta para distribución de gastos por categoría
-class GastosPieChartView extends StatelessWidget {
+class GastosPieChartView extends StatefulWidget {
   final String placeId;
 
   const GastosPieChartView({
@@ -12,9 +12,22 @@ class GastosPieChartView extends StatelessWidget {
   });
 
   @override
+  State<GastosPieChartView> createState() => _GastosPieChartViewState();
+}
+
+class _GastosPieChartViewState extends State<GastosPieChartView> {
+  late final Stream<Map<String, double>> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FinanzasService(placeId: widget.placeId).getGastosPorCategoria();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<Map<String, double>>(
-      stream: FinanzasService(placeId: placeId).getGastosPorCategoria(),
+      stream: _stream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const SizedBox(

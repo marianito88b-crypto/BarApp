@@ -238,7 +238,7 @@ mixin HomeLogicMixin<T extends StatefulWidget> on State<T> {
   /// Si falla la sincronización, revierte los cambios.
   Future<void> handleFollow(Place place, bool isCurrentlyFollowing) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null || user.isAnonymous) return;
 
     // 1. UI OPTIMISTA (Instantánea)
     // Calculamos el nuevo valor esperado

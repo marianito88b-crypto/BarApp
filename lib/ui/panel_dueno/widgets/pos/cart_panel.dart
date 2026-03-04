@@ -13,6 +13,7 @@ class CartPanel extends StatelessWidget {
   final List<Map<String, dynamic>> pedidoHistorico;
   final double totalGeneral;
   final bool guardando;
+  final Stream<DocumentSnapshot> mesaStream;
   final Function(int index) onRestarProducto;
   final Function(Map<String, dynamic> item) onEliminarItemHistorico;
   final VoidCallback onMarcharPedido;
@@ -29,6 +30,7 @@ class CartPanel extends StatelessWidget {
     required this.pedidoHistorico,
     required this.totalGeneral,
     required this.guardando,
+    required this.mesaStream,
     required this.onRestarProducto,
     required this.onEliminarItemHistorico,
     required this.onMarcharPedido,
@@ -41,12 +43,7 @@ class CartPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('mesas')
-          .doc(mesaId)
-          .snapshots(),
+      stream: mesaStream,
       builder: (context, mesaSnap) {
         final mesaData = mesaSnap.data?.data();
         final estadoMesa = (mesaData != null && mesaData is Map<String, dynamic>) 

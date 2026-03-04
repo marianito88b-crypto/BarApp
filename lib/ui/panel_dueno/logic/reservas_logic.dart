@@ -255,56 +255,47 @@ mixin ReservasLogicMixin<T extends StatefulWidget> on State<T> {
     String reservaId,
     Map<String, dynamic> data,
   ) async {
-    final reservaRef = FirebaseFirestore.instance
-        .collection("places")
-        .doc(placeId)
-        .collection("reservas")
-        .doc(reservaId);
+    final db = FirebaseFirestore.instance;
+    final placeRef = db.collection("places").doc(placeId);
+    final reservaRef = placeRef.collection("reservas").doc(reservaId);
+
+    // Extraer las mesas antes de entrar a la transacción
+    final mesaId = data['mesaId'];
+    List<String> mesasIds = [];
+    if (mesaId != null) {
+      if (mesaId is List) {
+        mesasIds = List<String>.from(mesaId);
+      } else {
+        mesasIds = [mesaId.toString()];
+      }
+    }
 
     try {
-      final snapshot = await reservaRef.get();
+      // 🔒 TRANSACCIÓN ATÓMICA: leer + escribir en una sola operación.
+      // Previene que dos dispositivos auto-ocupen la misma reserva simultáneamente.
+      await db.runTransaction((tx) async {
+        final snap = await tx.get(reservaRef);
+        if (!snap.exists) return;
 
-      // 🔒 PROTECCIÓN: verificación en tiempo real
-      if (!snapshot.exists) return;
-
-      final estadoActual = snapshot.data()?['estado'];
-      if (estadoActual != 'confirmada') {
-        return; // Ya fue procesada por otro ciclo
-      }
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      // 1. Reserva → En curso
-      batch.update(reservaRef, {"estado": "en_curso"});
-
-      // 2. Mesa(s) → Ocupada(s) - Soporta múltiples mesas
-      final mesaId = data['mesaId'];
-      List<String> mesasIds = [];
-
-      if (mesaId != null) {
-        if (mesaId is List) {
-          mesasIds = List<String>.from(mesaId);
-        } else {
-          mesasIds = [mesaId.toString()];
+        final estadoActual = snap.data()?['estado'];
+        if (estadoActual != 'confirmada') {
+          return; // Ya fue procesada por otro ciclo o dispositivo
         }
 
-        // Marcar todas las mesas como ocupadas
-        for (final mesaIdStr in mesasIds) {
-          final mesaRef = FirebaseFirestore.instance
-              .collection("places")
-              .doc(placeId)
-              .collection("mesas")
-              .doc(mesaIdStr);
+        // 1. Reserva → En curso
+        tx.update(reservaRef, {"estado": "en_curso"});
 
-          batch.update(mesaRef, {
+        // 2. Mesa(s) → Ocupada(s)
+        for (final mesaIdStr in mesasIds) {
+          final mesaRef = placeRef.collection("mesas").doc(mesaIdStr);
+          tx.update(mesaRef, {
             "estado": "ocupada",
             "clienteActivo": data['cliente'],
             "reservaIdActiva": reservaId,
           });
         }
-      }
+      });
 
-      await batch.commit();
       _alertedReservations.remove(reservaId);
       debugPrint("✅ Auto-ocupada reserva ${data['cliente']} ($reservaId)");
     } catch (e) {
@@ -327,15 +318,13 @@ mixin ReservasLogicMixin<T extends StatefulWidget> on State<T> {
     Map<String, dynamic> data,
     String nuevoEstado,
   ) async {
-    final batch = FirebaseFirestore.instance.batch();
+    final db = FirebaseFirestore.instance;
 
-    final reservaRef = FirebaseFirestore.instance
+    final reservaRef = db
         .collection("places")
         .doc(placeId)
         .collection("reservas")
         .doc(id);
-
-    batch.update(reservaRef, {"estado": nuevoEstado});
 
     final mesaId = data['mesaId'];
     List<String> mesasIds = [];
@@ -349,52 +338,38 @@ mixin ReservasLogicMixin<T extends StatefulWidget> on State<T> {
       }
     }
 
-    if (mesasIds.isNotEmpty) {
-      if (nuevoEstado == 'confirmada') {
-        // Marcar todas las mesas como reservadas
-        for (final mesaIdStr in mesasIds) {
-          final mesaRef = FirebaseFirestore.instance
-              .collection("places")
-              .doc(placeId)
-              .collection("mesas")
-              .doc(mesaIdStr);
+    // 🔒 TRANSACCIÓN ATÓMICA: las lecturas de mesa para el caso terminal también
+    // ocurren dentro de la transacción, eliminando la ventana de TOCTOU.
+    await db.runTransaction((tx) async {
+      tx.update(reservaRef, {"estado": nuevoEstado});
 
-          batch.update(mesaRef, {
+      for (final mesaIdStr in mesasIds) {
+        final mesaRef = db
+            .collection("places")
+            .doc(placeId)
+            .collection("mesas")
+            .doc(mesaIdStr);
+
+        if (nuevoEstado == 'confirmada') {
+          tx.update(mesaRef, {
             "estado": "reservada",
             "reservaIdActiva": id,
           });
-        }
-      } else if (nuevoEstado == 'en_curso') {
-        // Marcar todas las mesas como ocupadas
-        for (final mesaIdStr in mesasIds) {
-          final mesaRef = FirebaseFirestore.instance
-              .collection("places")
-              .doc(placeId)
-              .collection("mesas")
-              .doc(mesaIdStr);
-
-          batch.update(mesaRef, {
+        } else if (nuevoEstado == 'en_curso') {
+          tx.update(mesaRef, {
             "estado": "ocupada",
             "clienteActivo": data['cliente'],
             "reservaIdActiva": id,
           });
-        }
-      } else if (nuevoEstado == 'rechazada' ||
-          nuevoEstado == 'completada' ||
-          nuevoEstado == 'no_asistio') {
-        // Liberar todas las mesas asociadas
-        for (final mesaIdStr in mesasIds) {
-          final mesaRef = FirebaseFirestore.instance
-              .collection("places")
-              .doc(placeId)
-              .collection("mesas")
-              .doc(mesaIdStr);
-
-          final mesaSnap = await mesaRef.get();
+        } else if (nuevoEstado == 'rechazada' ||
+            nuevoEstado == 'completada' ||
+            nuevoEstado == 'no_asistio') {
+          // Leer el estado actual dentro de la transacción para evitar TOCTOU
+          final mesaSnap = await tx.get(mesaRef);
           final reservaActiva = mesaSnap.data()?['reservaIdActiva'];
 
           if (reservaActiva == id) {
-            batch.update(mesaRef, {
+            tx.update(mesaRef, {
               "estado": "libre",
               "clienteActivo": FieldValue.delete(),
               "reservaIdActiva": FieldValue.delete(),
@@ -402,9 +377,7 @@ mixin ReservasLogicMixin<T extends StatefulWidget> on State<T> {
           }
         }
       }
-    }
-
-    await batch.commit();
+    });
 
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

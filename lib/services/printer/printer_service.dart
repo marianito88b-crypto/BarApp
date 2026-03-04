@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'ticket_utils.dart';
@@ -10,7 +11,18 @@ class PrinterService {
   factory PrinterService() => _instance;
   PrinterService._internal();
 
-  BlueThermalPrinter bluetooth = BlueThermalPrinter.instance;
+  /// Solo inicializar BlueThermalPrinter en Android (no soporta iOS correctamente)
+  BlueThermalPrinter? get bluetooth {
+    if (kIsWeb) return null;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return BlueThermalPrinter.instance;
+    }
+    return null;
+  }
+
+  /// Verifica si estamos en una plataforma que usa Bluetooth (Android)
+  bool get _usaBluetooth =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   // Definimos el formato de 58mm manualmente para máxima compatibilidad
   final PdfPageFormat format58mm = const PdfPageFormat(
@@ -23,10 +35,11 @@ class PrinterService {
   // 1. IMPRIMIR COMANDA (COCINA)
   // ===============================================================
   Future<void> printComanda(Map<String, dynamic> pedido) async {
-    if (kIsWeb) {
-      await _printWebUsb(pedido, esTicketCliente: false);
-    } else {
+    if (_usaBluetooth) {
       await _printComandaBluetooth(pedido);
+    } else {
+      // Web y iOS usan impresión por PDF/AirPrint
+      await _printWebUsb(pedido, esTicketCliente: false);
     }
   }
 
@@ -34,10 +47,11 @@ class PrinterService {
   // 2. IMPRIMIR TICKET (CLIENTE)
   // ===============================================================
   Future<void> printTicket(Map<String, dynamic> datosTicket) async {
-    if (kIsWeb) {
-      await _printWebUsb(datosTicket, esTicketCliente: true);
-    } else {
+    if (_usaBluetooth) {
       await _printTicketBluetooth(datosTicket);
+    } else {
+      // Web y iOS usan impresión por PDF/AirPrint
+      await _printWebUsb(datosTicket, esTicketCliente: true);
     }
   }
 
@@ -80,6 +94,7 @@ class PrinterService {
       );
     } catch (e) {
       debugPrint("🔥 ERROR WEB PRINT: $e");
+      rethrow;
     }
   }
 
@@ -87,7 +102,9 @@ class PrinterService {
   // 📱 APP: BLUETOOTH (COCINA Y TICKET)
   // ---------------------------------------------------------------
   Future<void> _printComandaBluetooth(Map<String, dynamic> pedido) async {
-    if (!(await bluetooth.isConnected ?? false)) return;
+    final bt = bluetooth;
+    if (bt == null) return;
+    if (!(await bt.isConnected ?? false)) return;
     try {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
@@ -138,7 +155,8 @@ class PrinterService {
         
         // Si el item individual tiene nota (opcional, por si acaso)
         if (item['nota'] != null && item['nota'].toString().isNotEmpty) {
-           bytes += generator.text("  (⚠️ ${item['nota']})", styles: const PosStyles(bold: true));
+          // NOTA: No usar emoji aquí — las impresoras térmicas no soportan Unicode.
+          bytes += generator.text('  (!! ${item['nota']})', styles: const PosStyles(bold: true));
         }
 
         bytes += generator.feed(1);
@@ -146,14 +164,23 @@ class PrinterService {
 
       bytes += generator.feed(2);
       bytes += generator.cut();
-      await bluetooth.writeBytes(Uint8List.fromList(bytes));
+      // Leer cantidad de copias de la preferencia (max 3 para no bloquear la cola)
+      final prefsComanda = await SharedPreferences.getInstance();
+      final int copiesComanda = (prefsComanda.getInt('cantidadCopias') ?? 1).clamp(1, 3);
+      final Uint8List bytesComanda = Uint8List.fromList(bytes);
+      for (int i = 0; i < copiesComanda; i++) {
+        await bt.writeBytes(bytesComanda);
+      }
     } catch (e) {
       debugPrint("Error Bluetooth Comanda: $e");
+      rethrow;
     }
   }
 
   Future<void> _printTicketBluetooth(Map<String, dynamic> datos) async {
-    if (!(await bluetooth.isConnected ?? false)) return;
+    final bt = bluetooth;
+    if (bt == null) return;
+    if (!(await bt.isConnected ?? false)) return;
     try {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm58, profile);
@@ -181,10 +208,14 @@ class PrinterService {
       bytes += generator.hr();
 
       for (var item in items) {
-        bytes += generator.text(item['nombre'], styles: const PosStyles(bold: true));
+        // Casteo seguro: evita crash si precio/cantidad llegaron como null o String
+        final itemPrecio = (item['precio'] as num?)?.toDouble() ?? 0.0;
+        final itemCant = (item['cantidad'] as num?)?.toInt() ?? 1;
+        final itemNombre = item['nombre']?.toString() ?? '?';
+        bytes += generator.text(itemNombre, styles: const PosStyles(bold: true));
         bytes += generator.row([
-          PosColumn(text: '${item['cantidad']} x \$${item['precio']}', width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
-          PosColumn(text: '\$${(item['precio'] * item['cantidad']).toStringAsFixed(0)}', width: 5, styles: const PosStyles(align: PosAlign.right, bold: true)),
+          PosColumn(text: '$itemCant x \$${itemPrecio.toStringAsFixed(0)}', width: 7, styles: const PosStyles(fontType: PosFontType.fontB)),
+          PosColumn(text: '\$${(itemPrecio * itemCant).toStringAsFixed(0)}', width: 5, styles: const PosStyles(align: PosAlign.right, bold: true)),
         ]);
       }
 
@@ -222,12 +253,19 @@ class PrinterService {
       ]);
 
       bytes += generator.feed(2);
-      bytes += generator.text('¡Gracias por su compra!', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Gracias por su compra!', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.feed(2);
       bytes += generator.cut();
-      await bluetooth.writeBytes(Uint8List.fromList(bytes));
+      // Leer cantidad de copias de la preferencia (max 3 para no bloquear la cola)
+      final prefsTicket = await SharedPreferences.getInstance();
+      final int copiesTicket = (prefsTicket.getInt('cantidadCopias') ?? 1).clamp(1, 3);
+      final Uint8List bytesTicket = Uint8List.fromList(bytes);
+      for (int i = 0; i < copiesTicket; i++) {
+        await bt.writeBytes(bytesTicket);
+      }
     } catch (e) {
       debugPrint("Error Bluetooth Ticket: $e");
+      rethrow;
     }
   }
 }

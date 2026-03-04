@@ -24,6 +24,12 @@ rootProject.layout.buildDirectory.set(newBuildDir)
 subprojects {
     val newSubprojectBuildDir = newBuildDir.dir(project.name)
     project.layout.buildDirectory.set(newSubprojectBuildDir)
+    project.configurations.all {
+        resolutionStrategy {
+            force("androidx.core:core:1.13.1")
+            force("androidx.core:core-ktx:1.13.1")
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

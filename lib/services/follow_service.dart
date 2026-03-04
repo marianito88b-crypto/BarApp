@@ -11,7 +11,7 @@ class FollowService {
     required bool isCurrentlyFollowing,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
+    if (user == null || user.isAnonymous) return null;
 
     final userRef = FirebaseFirestore.instance.collection('usuarios').doc(user.uid);
     final placeRef = FirebaseFirestore.instance.collection('places').doc(placeId);

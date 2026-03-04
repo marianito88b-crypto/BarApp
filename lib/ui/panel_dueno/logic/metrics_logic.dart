@@ -160,7 +160,7 @@ mixin MetricsLogicMixin<T extends StatefulWidget> on State<T> {
         if (data['items'] != null) {
           for (var item in data['items']) {
             final nombre = item['nombre'] ?? 'S/N';
-            final qty = (item['cantidad'] ?? 1) as int;
+            final qty = (item['cantidad'] as num?)?.toInt() ?? 1;
             productCounter[nombre] = (productCounter[nombre] ?? 0) + qty;
           }
         }

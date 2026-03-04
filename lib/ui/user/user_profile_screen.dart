@@ -177,6 +177,23 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   void _showMyReservations() {
     if (loggedInUser == null) return;
+
+    // Cache streams before showing the modal
+    final activasStream = FirebaseFirestore.instance
+        .collectionGroup('reservas')
+        .where('userId', isEqualTo: loggedInUser!.uid)
+        .where('estado', whereIn: ['pendiente', 'confirmada', 'en_curso'])
+        .orderBy('fecha', descending: true)
+        .limit(1)
+        .snapshots();
+
+    final completadaStream = FirebaseFirestore.instance
+        .collectionGroup('reservas')
+        .where('userId', isEqualTo: loggedInUser!.uid)
+        .where('estado', isEqualTo: 'completada')
+        .orderBy('fecha', descending: true)
+        .limit(1)
+        .snapshots();
     
     showModalBottomSheet(
       context: context,
@@ -192,22 +209,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           maxChildSize: 0.9,
           expand: false,
           builder: (_, scrollController) {
-            // Query para reservas activas (pendiente, confirmada, en_curso)
-            final queryActivas = FirebaseFirestore.instance
-                .collectionGroup('reservas')
-                .where('userId', isEqualTo: loggedInUser!.uid)
-                .where('estado', whereIn: ['pendiente', 'confirmada', 'en_curso'])
-                .orderBy('fecha', descending: true)
-                .limit(1);
-            
-            // Query para la última completada
-            final queryCompletada = FirebaseFirestore.instance
-                .collectionGroup('reservas')
-                .where('userId', isEqualTo: loggedInUser!.uid)
-                .where('estado', isEqualTo: 'completada')
-                .orderBy('fecha', descending: true)
-                .limit(1);
-            
             return Column(
               children: [
                 const SizedBox(height: 20),
@@ -236,10 +237,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
-                    stream: queryActivas.snapshots(),
+                    stream: activasStream,
                     builder: (context, snapshotActivas) {
                       return StreamBuilder<QuerySnapshot>(
-                        stream: queryCompletada.snapshots(),
+                        stream: completadaStream,
                         builder: (context, snapshotCompletada) {
                           if (!snapshotActivas.hasData || !snapshotCompletada.hasData) {
                             return const Center(
@@ -514,47 +515,41 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         builder: (context, snapshot) {
           // Manejo robusto de estados
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(color: Colors.orangeAccent),
-              ),
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.orangeAccent),
             );
           }
 
           if (snapshot.hasError) {
             debugPrint('Error en FutureBuilder: ${snapshot.error}');
-            return Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Error al cargar el perfil',
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        refreshCombinedFuture();
-                        setState(() {});
-                      },
-                      child: const Text('Reintentar'),
-                    ),
-                  ],
-                ),
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Error al cargar el perfil',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      refreshCombinedFuture();
+                      setState(() {});
+                    },
+                    child: const Text('Reintentar'),
+                  ),
+                ],
               ),
             );
           }
 
           if (!snapshot.hasData) {
-            return const Scaffold(
-              body: Center(
-                child: Text(
-                  'No se pudieron cargar los datos del perfil.',
-                  style: TextStyle(color: Colors.white70),
-                ),
+            return const Center(
+              child: Text(
+                'No se pudieron cargar los datos del perfil.',
+                style: TextStyle(color: Colors.white70),
               ),
             );
           }
@@ -656,6 +651,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           }
 
           return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -686,20 +682,22 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   ),
 
                 // --- HEADER CARD (Fondo + Avatar + Nombre) ---
-                ProfileHeaderCard(
-                  backgroundUrl: backgroundUrl,
-                  photoUrl: finalDisplayPhotoUrl,
-                  displayName: isViewingOwnProfile && isGuest
-                      ? 'Invitado'
-                      : displayUserName,
-                  instagramHandle: instagramHandle,
-                  accentColor: accentColor,
-                  isGuest: isGuest,
-                  onInstagramTap: instagramHandle.isNotEmpty
-                      ? () async {
-                          // TODO: Implementar lógica de url launcher para Instagram
-                        }
-                      : null,
+                RepaintBoundary(
+                  child: ProfileHeaderCard(
+                    backgroundUrl: backgroundUrl,
+                    photoUrl: finalDisplayPhotoUrl,
+                    displayName: isViewingOwnProfile && isGuest
+                        ? 'Invitado'
+                        : displayUserName,
+                    instagramHandle: instagramHandle,
+                    accentColor: accentColor,
+                    isGuest: isGuest,
+                    onInstagramTap: instagramHandle.isNotEmpty
+                        ? () async {
+                            // TODO: Implementar lógica de url launcher para Instagram
+                          }
+                        : null,
+                  ),
                 ),
 
                 const SizedBox(height: 20),
@@ -764,20 +762,22 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     ),
                   )
                 else
-                  ReviewsPreviewCard(
-                    reviewCount: reviewCount,
-                    avgRating: avgRating,
-                    joinDate: isViewingOwnProfile
-                        ? _formatJoinDate(loggedInUser?.metadata.creationTime)
-                        : (firestoreData?['createdAt'] != null
-                            ? _formatJoinDate(
-                                (firestoreData!['createdAt'] as Timestamp).toDate(),
-                              )
-                            : '---'),
-                    reviews: reviews,
-                    displayUserName: displayUserName,
-                    isOwnProfile: isViewingOwnProfile,
-                    accentColor: accentColor,
+                  RepaintBoundary(
+                    child: ReviewsPreviewCard(
+                      reviewCount: reviewCount,
+                      avgRating: avgRating,
+                      joinDate: isViewingOwnProfile
+                          ? _formatJoinDate(loggedInUser?.metadata.creationTime)
+                          : (firestoreData?['createdAt'] != null
+                              ? _formatJoinDate(
+                                  (firestoreData!['createdAt'] as Timestamp).toDate(),
+                                )
+                              : '---'),
+                      reviews: reviews,
+                      displayUserName: displayUserName,
+                      isOwnProfile: isViewingOwnProfile,
+                      accentColor: accentColor,
+                    ),
                   ),
               ],
             ),

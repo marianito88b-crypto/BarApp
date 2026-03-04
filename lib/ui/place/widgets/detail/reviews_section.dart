@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Sección de opiniones/reviews del lugar
-class ReviewsSection extends StatelessWidget {
+class ReviewsSection extends StatefulWidget {
   final String placeId;
   final Color accentColor;
 
@@ -11,6 +11,25 @@ class ReviewsSection extends StatelessWidget {
     required this.placeId,
     required this.accentColor,
   });
+
+  @override
+  State<ReviewsSection> createState() => _ReviewsSectionState();
+}
+
+class _ReviewsSectionState extends State<ReviewsSection> {
+  late final Stream<QuerySnapshot> _reviewsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _reviewsStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('ratings')
+        .orderBy('timestamp', descending: true)
+        .limit(10)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,13 +46,7 @@ class ReviewsSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('places')
-              .doc(placeId)
-              .collection('ratings')
-              .orderBy('timestamp', descending: true)
-              .limit(10)
-              .snapshots(),
+          stream: _reviewsStream,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
               return const Center(
@@ -53,7 +66,7 @@ class ReviewsSection extends StatelessWidget {
               itemCount: reviews.length,
               itemBuilder: (context, index) => ReviewItem(
                 review: reviews[index].data() as Map<String, dynamic>,
-                accentColor: accentColor,
+                accentColor: widget.accentColor,
               ),
             );
           },

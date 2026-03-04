@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 /// Campos: placeNombre, estrellas, etiquetas, comentarios, timestamp.
 ///
 /// Intenta primero 'usuarios', luego 'users' (colección legacy).
-class ClientRatingsModal extends StatelessWidget {
+class ClientRatingsModal extends StatefulWidget {
   final String userId;
 
   const ClientRatingsModal({
@@ -25,12 +25,25 @@ class ClientRatingsModal extends StatelessWidget {
     );
   }
 
+  @override
+  State<ClientRatingsModal> createState() => _ClientRatingsModalState();
+}
+
+class _ClientRatingsModalState extends State<ClientRatingsModal> {
+  late final Future<String> _collectionFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _collectionFuture = _resolveCollection();
+  }
+
   /// Intenta la colección 'usuarios' primero; si no hay docs, 'users'.
   /// Se usa un FutureBuilder para resolver la colección correcta una vez.
   Future<String> _resolveCollection() async {
     final db = FirebaseFirestore.instance;
     // Si el doc en 'usuarios' existe, usar esa colección
-    final snap = await db.collection('usuarios').doc(userId).get();
+    final snap = await db.collection('usuarios').doc(widget.userId).get();
     return snap.exists ? 'usuarios' : 'users';
   }
 
@@ -98,7 +111,7 @@ class ClientRatingsModal extends StatelessWidget {
           // ── Contenido ────────────────────────────────────────────
           Expanded(
             child: FutureBuilder<String>(
-              future: _resolveCollection(),
+              future: _collectionFuture,
               builder: (context, futureSnap) {
                 if (!futureSnap.hasData) {
                   return const Center(
@@ -109,7 +122,7 @@ class ClientRatingsModal extends StatelessWidget {
                 return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: FirebaseFirestore.instance
                       .collection(collection)
-                      .doc(userId)
+                      .doc(widget.userId)
                       .collection('reputacion_recibida')
                       .orderBy('timestamp', descending: true)
                       .snapshots(),

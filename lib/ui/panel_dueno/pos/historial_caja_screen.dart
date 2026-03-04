@@ -2,10 +2,27 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../widgets/caja/caja_history_card.dart';
 
-class HistorialCajaScreen extends StatelessWidget {
+class HistorialCajaScreen extends StatefulWidget {
   final String placeId;
 
   const HistorialCajaScreen({super.key, required this.placeId});
+
+  @override
+  State<HistorialCajaScreen> createState() => _HistorialCajaScreenState();
+}
+
+class _HistorialCajaScreenState extends State<HistorialCajaScreen> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('places').doc(widget.placeId)
+        .collection('caja_sesiones')
+        .orderBy('fecha_apertura', descending: true)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,11 +35,7 @@ class HistorialCajaScreen extends StatelessWidget {
         elevation: 0,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('places').doc(placeId)
-            .collection('caja_sesiones')
-            .orderBy('fecha_apertura', descending: true) // Lo más nuevo arriba
-            .snapshots(),
+        stream: _stream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Colors.orangeAccent));

@@ -5,7 +5,7 @@ import 'package:barapp/ui/panel_dueno/sections/delivery_orders_screen.dart';
 import 'package:barapp/ui/panel_dueno/sections/mesas_mobile.dart';
 
 /// Tarjeta de estadística en vivo (mesas ocupadas, pedidos web).
-class LiveStatCard extends StatelessWidget {
+class LiveStatCard extends StatefulWidget {
   final String placeId;
   final String type;
   final bool isDesktop;
@@ -20,51 +20,76 @@ class LiveStatCard extends StatelessWidget {
   });
 
   @override
+  State<LiveStatCard> createState() => _LiveStatCardState();
+}
+
+class _LiveStatCardState extends State<LiveStatCard> {
+  Stream<QuerySnapshot>? _mainStream;
+  Stream<QuerySnapshot>? _reservasStream;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.type == 'mesas_ocupadas') {
+      _mainStream = FirebaseFirestore.instance
+          .collection("places")
+          .doc(widget.placeId)
+          .collection("mesas")
+          .snapshots();
+      final now = DateTime.now();
+      final inicioHoy = DateTime(now.year, now.month, now.day);
+      final finHoy = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      _reservasStream = FirebaseFirestore.instance
+          .collection("places")
+          .doc(widget.placeId)
+          .collection("reservas")
+          .where('estado', whereIn: ['confirmada', 'en_curso'])
+          .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(inicioHoy))
+          .where('fecha', isLessThanOrEqualTo: Timestamp.fromDate(finHoy))
+          .snapshots();
+    } else if (widget.type == 'pedidos_web') {
+      _mainStream = FirebaseFirestore.instance
+          .collection("places")
+          .doc(widget.placeId)
+          .collection("orders")
+          .where('estado', whereIn: ['pendiente', 'confirmado', 'en_preparacion', 'en_camino'])
+          .where('origen', isEqualTo: 'app')
+          .snapshots();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    Stream<QuerySnapshot> stream;
     String label;
     IconData icon;
     Color color;
     VoidCallback? onTap;
 
-    if (type == 'mesas_ocupadas') {
-      // Stream para todas las mesas (necesitamos total, ocupadas, libres)
-      stream = FirebaseFirestore.instance
-          .collection("places")
-          .doc(placeId)
-          .collection("mesas")
-          .snapshots();
+    if (widget.type == 'mesas_ocupadas') {
       label = "Mesas";
       icon = Icons.table_restaurant;
       color = Colors.orangeAccent;
       onTap = () {
-        if (onNavigateToTab != null) {
-          onNavigateToTab!('Mesas');
+        if (widget.onNavigateToTab != null) {
+          widget.onNavigateToTab!('Mesas');
         } else {
           // Fallback: navegación tradicional si no hay callback
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => MesasMobile(placeId: placeId),
+              builder: (_) => MesasMobile(placeId: widget.placeId),
             ),
           );
         }
       };
-    } else if (type == 'pedidos_web') {
-      stream = FirebaseFirestore.instance
-          .collection("places")
-          .doc(placeId)
-          .collection("orders")
-          .where('estado', whereIn: ['pendiente', 'confirmado', 'en_preparacion', 'en_camino'])
-          .where('origen', isEqualTo: 'app')
-          .snapshots();
+    } else if (widget.type == 'pedidos_web') {
       label = "Pedidos Web";
       icon = Icons.delivery_dining;
       color = Colors.greenAccent;
       onTap = () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => DeliveryOrdersScreen(placeId: placeId),
+              builder: (_) => DeliveryOrdersScreen(placeId: widget.placeId),
             ),
           );
     } else {
@@ -72,9 +97,9 @@ class LiveStatCard extends StatelessWidget {
     }
 
     return StreamBuilder<QuerySnapshot>(
-      stream: stream,
+      stream: _mainStream,
       builder: (context, snap) {
-        if (type == 'mesas_ocupadas') {
+        if (widget.type == 'mesas_ocupadas') {
           return _buildMesasCard(context, snap, color, icon, label, onTap);
         }
 
@@ -82,7 +107,7 @@ class LiveStatCard extends StatelessWidget {
         final count = snap.data?.docs.length ?? 0;
 
         int attentionCount = 0;
-        if (snap.hasData && type == 'pedidos_web') {
+        if (snap.hasData && widget.type == 'pedidos_web') {
           attentionCount = snap.data!.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final estado = data['estado'];
@@ -96,7 +121,7 @@ class LiveStatCard extends StatelessWidget {
         final displayLabel = attentionCount > 0 ? "¡REVISAR!" : label;
 
         Widget content = Container(
-          height: isDesktop ? 140 : null,
+          height: widget.isDesktop ? 140 : null,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: attentionCount > 0
@@ -108,7 +133,7 @@ class LiveStatCard extends StatelessWidget {
               width: attentionCount > 0 ? 2 : 1,
             ),
             boxShadow: [
-              if (count > 0 && type == 'pedidos_web')
+              if (count > 0 && widget.type == 'pedidos_web')
                 BoxShadow(
                   color: displayColor.withValues(alpha: 0.15),
                   blurRadius: 10,
@@ -116,7 +141,7 @@ class LiveStatCard extends StatelessWidget {
                 ),
             ],
           ),
-          child: isDesktop
+          child: widget.isDesktop
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -239,43 +264,30 @@ class LiveStatCard extends StatelessWidget {
       for (var doc in snap.data!.docs) {
         final data = doc.data() as Map<String, dynamic>;
         final estado = data['estado'] ?? 'libre';
-        if (estado == 'ocupada') {
-          ocupadas++;
-        } else if (estado == 'reservada') {
-          reservadas++;
-        } else {
+        if (estado == 'libre') {
           libres++;
+        } else {
+          ocupadas++;
+          if (estado == 'reservada') reservadas++;
         }
       }
     }
 
-    // Obtener reservas próximas (confirmadas o en_curso de hoy)
-    final now = DateTime.now();
-    final inicioHoy = DateTime(now.year, now.month, now.day);
-    final finHoy = DateTime(now.year, now.month, now.day, 23, 59, 59);
-
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection("places")
-          .doc(placeId)
-          .collection("reservas")
-          .where('estado', whereIn: ['confirmada', 'en_curso'])
-          .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(inicioHoy))
-          .where('fecha', isLessThanOrEqualTo: Timestamp.fromDate(finHoy))
-          .snapshots(),
+      stream: _reservasStream,
       builder: (context, reservasSnap) {
         // Las mesas reservadas también se consideran ocupadas visualmente
         final int ocupadasConReservas = ocupadas + reservadas;
 
         Widget content = Container(
-          height: isDesktop ? 140 : null,
+          height: widget.isDesktop ? 140 : null,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: const Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
-          child: isDesktop
+          child: widget.isDesktop
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

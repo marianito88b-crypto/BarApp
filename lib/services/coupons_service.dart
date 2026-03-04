@@ -2,6 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+/// Opciones de validez para cupones de premio (panel dueño)
+enum ValidezCupon {
+  horas24,
+  dias3,
+  dias7,
+}
+
 /// Servicio para gestionar cupones de descuento para clientes
 class CouponsService {
   static const _uuid = Uuid();
@@ -22,6 +29,18 @@ class CouponsService {
     return RegExp(r'^[A-Z0-9]+$').hasMatch(codigo);
   }
 
+  /// Duración de validez del cupón (para premios del panel dueño)
+  static Duration validezToDuration(ValidezCupon validez) {
+    switch (validez) {
+      case ValidezCupon.horas24:
+        return const Duration(hours: 24);
+      case ValidezCupon.dias3:
+        return const Duration(days: 3);
+      case ValidezCupon.dias7:
+        return const Duration(days: 7);
+    }
+  }
+
   /// Crea un cupón de descuento para un cliente específico
   /// 
   /// Guarda el cupón en users/{userId}/mis_cupones
@@ -32,6 +51,7 @@ class CouponsService {
   /// [codigo]: Código del cupón (si es null, se genera automáticamente)
   /// [descuentoPorcentaje]: Porcentaje de descuento (ej: 10 para 10%)
   /// [descripcion]: Descripción opcional del cupón
+  /// [validez]: Validez del cupón (24h, 3 días, 7 días). Por defecto 7 días.
   /// 
   /// Retorna el código del cupón creado
   static Future<String> crearCupon({
@@ -41,6 +61,7 @@ class CouponsService {
     String? codigo,
     double? descuentoPorcentaje,
     String? descripcion,
+    ValidezCupon validez = ValidezCupon.dias7,
   }) async {
     try {
       // Generar código si no se proporciona
@@ -62,20 +83,25 @@ class CouponsService {
       // Crear documento del cupón en la subcolección mis_cupones
       final cuponRef = userRef.collection('mis_cupones').doc();
 
+      final validoHastaDate =
+          DateTime.now().add(validezToDuration(validez));
+
       await cuponRef.set({
         'codigo': codigoFinal,
         'placeId': placeId,
         'placeName': placeName,
+        'venueId': placeId,
+        'venueName': placeName,
         'descuentoPorcentaje': descuentoPorcentaje ?? 10.0,
-        'descripcion': descripcion ?? 'Cupón de regalo',
+        'descripcion': descripcion ?? 'Premio por ser un cliente destacado',
         'creadoEn': FieldValue.serverTimestamp(),
         'usado': false,
         'usadoEn': null,
-        'validoHasta': Timestamp.fromDate(
-          DateTime.now().add(const Duration(days: 90)), // Válido por 90 días
-        ),
+        'validoHasta': Timestamp.fromDate(validoHastaDate),
       });
 
+      // Notificación push: Cloud Function sendGiftCouponNotification (Firestore trigger)
+      // envía al cliente: "¡[Nombre del Bar] te ha premiado! 🎁"
       debugPrint('✅ Cupón creado: $codigoFinal para usuario $userId');
       return codigoFinal;
     } catch (e) {
@@ -93,13 +119,18 @@ class CouponsService {
   }
 
   /// Obtiene todos los cupones de un usuario
-  /// 
+  ///
   /// [userId]: ID del usuario
-  /// 
+  /// [collection]: Colección donde está el usuario ('usuarios' o 'users').
+  ///   Usar BarPointsService._resolveUserRef o pasar el valor ya resuelto.
+  ///
   /// Retorna un stream de los cupones del usuario
-  static Stream<QuerySnapshot> obtenerCuponesUsuario(String userId) {
-    // Intentar primero en 'users'
-    var userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+  static Stream<QuerySnapshot> obtenerCuponesUsuario(
+    String userId, {
+    String collection = 'usuarios',
+  }) {
+    final userRef =
+        FirebaseFirestore.instance.collection(collection).doc(userId);
     
     return userRef.collection('mis_cupones')
         .where('usado', isEqualTo: false)
@@ -109,7 +140,7 @@ class CouponsService {
         .snapshots();
   }
 
-  /// Marca un cupón como usado
+  /// Marca un cupón como usado (con transacción para evitar doble uso)
   /// 
   /// [userId]: ID del usuario
   /// [cuponId]: ID del documento del cupón
@@ -125,9 +156,21 @@ class CouponsService {
         userRef = FirebaseFirestore.instance.collection('usuarios').doc(userId);
       }
 
-      await userRef.collection('mis_cupones').doc(cuponId).update({
-        'usado': true,
-        'usadoEn': FieldValue.serverTimestamp(),
+      final cuponRef = userRef.collection('mis_cupones').doc(cuponId);
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final cuponSnap = await transaction.get(cuponRef);
+        if (!cuponSnap.exists) {
+          throw Exception('Cupón no encontrado');
+        }
+        if (cuponSnap.data()?['usado'] == true) {
+          throw Exception('Cupón ya fue utilizado');
+        }
+
+        transaction.update(cuponRef, {
+          'usado': true,
+          'usadoEn': FieldValue.serverTimestamp(),
+        });
       });
 
       debugPrint('✅ Cupón marcado como usado: $cuponId');
@@ -176,7 +219,7 @@ class CouponsService {
       return usadoDoc.docs.isNotEmpty;
     } catch (e) {
       debugPrint('❌ Error validando código usado: $e');
-      return false; // En caso de error, permitir uso (fallback seguro)
+      return true; // Fail-closed: ante error de red/DB, considerar usado para evitar doble gasto
     }
   }
 
@@ -364,6 +407,20 @@ class CouponsService {
             };
           }
         }
+      }
+
+      // Cupones de regalo (premio): válidos solo en el local que los emitió
+      final cuponVenueId = cuponData['venueId'] as String? ?? cuponData['placeId'] as String?;
+      final cuponVenueName = cuponData['venueName'] as String? ?? cuponData['placeName'] as String? ?? 'este local';
+      if (cuponVenueId != null &&
+          cuponVenueId.isNotEmpty &&
+          placeId != null &&
+          placeId.isNotEmpty &&
+          cuponVenueId != placeId) {
+        return {
+          'valido': false,
+          'mensaje': 'Este cupón de regalo es exclusivo para consumos en $cuponVenueName.',
+        };
       }
 
       return {

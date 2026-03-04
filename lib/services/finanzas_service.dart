@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
 class FinanzasService {
   final String placeId;
@@ -66,54 +67,79 @@ class FinanzasService {
   }
 
   // 4. COMPARATIVA SEMANAL (CORREGIDO ✅)
+  // Escucha AMBAS colecciones para no servir datos stale cuando solo cambian gastos
   Stream<List<Map<String, dynamic>>> getComparativaSemanal() {
     DateTime haceUnaSemana = DateTime.now().subtract(const Duration(days: 6));
 
-    return FirebaseFirestore.instance
-        .collection('places').doc(placeId)
-        .snapshots()
-        .asyncMap((_) async {
-          var vSnap = await FirebaseFirestore.instance
-              .collection('places').doc(placeId).collection('ventas')
-              .where('fecha', isGreaterThanOrEqualTo: haceUnaSemana).get();
-          
-          var gSnap = await FirebaseFirestore.instance
-              .collection('places').doc(placeId).collection('gastos')
-              .where('fecha', isGreaterThanOrEqualTo: haceUnaSemana).get();
+    final ventasQuery = FirebaseFirestore.instance
+        .collection('places').doc(placeId).collection('ventas')
+        .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(haceUnaSemana));
 
-          List<Map<String, dynamic>> dias = [];
+    final gastosQuery = FirebaseFirestore.instance
+        .collection('places').doc(placeId).collection('gastos')
+        .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(haceUnaSemana));
 
-          for (int i = 0; i < 7; i++) {
-            DateTime fechaDia = haceUnaSemana.add(Duration(days: i));
-            double totalVenta = 0;
-            double totalGasto = 0;
+    QuerySnapshot? lastVentas;
+    QuerySnapshot? lastGastos;
+    StreamSubscription? vSub;
+    StreamSubscription? gSub;
 
-            for (var doc in vSnap.docs) {
-              DateTime f = (doc['fecha'] as Timestamp).toDate();
-              if (f.day == fechaDia.day && f.month == fechaDia.month) {
-                totalVenta += (doc['total'] ?? 0).toDouble();
-              }
-            }
+    late final StreamController<List<Map<String, dynamic>>> controller;
 
-            for (var doc in gSnap.docs) {
-              final data = doc.data();
-              // 🔥 FILTRO CLAVE: Solo sumamos al gráfico si está PAGADO
-              if (data['estado'] == 'pendiente') continue;
+    void recompute() {
+      if (lastVentas == null || lastGastos == null) return;
 
-              DateTime f = (data['fecha'] as Timestamp).toDate();
-              if (f.day == fechaDia.day && f.month == fechaDia.month) {
-                totalGasto += (data['monto'] ?? 0).toDouble();
-              }
-            }
+      List<Map<String, dynamic>> dias = [];
+      for (int i = 0; i < 7; i++) {
+        DateTime fechaDia = haceUnaSemana.add(Duration(days: i));
+        double totalVenta = 0;
+        double totalGasto = 0;
 
-            dias.add({
-              'dia': _getNombreDia(fechaDia.weekday),
-              'ventas': totalVenta,
-              'gastos': totalGasto,
-            });
+        for (var doc in lastVentas!.docs) {
+          DateTime f = (doc['fecha'] as Timestamp).toDate();
+          if (f.year == fechaDia.year && f.month == fechaDia.month && f.day == fechaDia.day) {
+            totalVenta += (doc['total'] ?? 0).toDouble();
           }
-          return dias;
+        }
+
+        for (var doc in lastGastos!.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          // 🔥 FILTRO CLAVE: Solo sumamos al gráfico si está PAGADO
+          if (data['estado'] == 'pendiente') continue;
+
+          DateTime f = (data['fecha'] as Timestamp).toDate();
+          if (f.year == fechaDia.year && f.month == fechaDia.month && f.day == fechaDia.day) {
+            totalGasto += (data['monto'] ?? 0).toDouble();
+          }
+        }
+
+        dias.add({
+          'dia': _getNombreDia(fechaDia.weekday),
+          'ventas': totalVenta,
+          'gastos': totalGasto,
         });
+      }
+      controller.add(dias);
+    }
+
+    controller = StreamController<List<Map<String, dynamic>>>(
+      onListen: () {
+        vSub = ventasQuery.snapshots().listen((s) {
+          lastVentas = s;
+          recompute();
+        });
+        gSub = gastosQuery.snapshots().listen((s) {
+          lastGastos = s;
+          recompute();
+        });
+      },
+      onCancel: () {
+        vSub?.cancel();
+        gSub?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   String _getNombreDia(int weekday) {

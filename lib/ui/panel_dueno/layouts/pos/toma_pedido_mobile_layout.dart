@@ -23,6 +23,8 @@ class TomaPedidoMobileLayout extends StatelessWidget {
   final VoidCallback onImprimirCuentaCliente;
   final VoidCallback onCobrarCuenta;
   final VoidCallback onLiberarMesa;
+  final Stream<QuerySnapshot> menuStream;
+  final Stream<DocumentSnapshot> mesaStream;
 
   const TomaPedidoMobileLayout({
     super.key,
@@ -43,6 +45,8 @@ class TomaPedidoMobileLayout extends StatelessWidget {
     required this.onImprimirCuentaCliente,
     required this.onCobrarCuenta,
     required this.onLiberarMesa,
+    required this.menuStream,
+    required this.mesaStream,
   });
 
   @override
@@ -105,12 +109,7 @@ class TomaPedidoMobileLayout extends StatelessWidget {
 
   Widget _buildProductList(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .collection('menu')
-          .orderBy('categoria')
-          .snapshots(),
+      stream: menuStream,
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(
@@ -142,8 +141,7 @@ class TomaPedidoMobileLayout extends StatelessWidget {
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final doc = docs[i];
-              final data = doc.data() as Map<String, dynamic>;
-              data['id'] = doc.id;
+              final data = {...doc.data() as Map<String, dynamic>, 'id': doc.id};
               return ProductCard(
                 doc: doc,
                 isGrid: false,
@@ -187,8 +185,7 @@ class TomaPedidoMobileLayout extends StatelessWidget {
                   delegate: SliverChildBuilderDelegate(
                     (ctx, i) {
                       final doc = groupedMenu[category]![i];
-                      final data = doc.data() as Map<String, dynamic>;
-                      data['id'] = doc.id;
+                      final data = {...doc.data() as Map<String, dynamic>, 'id': doc.id};
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: ProductCard(
@@ -301,6 +298,7 @@ class TomaPedidoMobileLayout extends StatelessWidget {
                     pedidoHistorico: pedidoHistorico,
                     totalGeneral: totalGeneral,
                     guardando: guardando,
+                    mesaStream: mesaStream,
                     onRestarProducto: onRestarProducto,
                     onEliminarItemHistorico: onEliminarItemHistorico,
                     onMarcharPedido: onMarcharPedido,

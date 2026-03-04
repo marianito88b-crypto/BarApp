@@ -1,4 +1,3 @@
-// ignore_for_file: use_build_context_synchronously
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../pos/toma_pedido_screen.dart';
@@ -15,6 +14,18 @@ class MesasMobile extends StatefulWidget {
 }
 
 class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
+  late final Stream<QuerySnapshot> _mesasStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _mesasStream = FirebaseFirestore.instance
+        .collection("places")
+        .doc(widget.placeId)
+        .collection("mesas")
+        .snapshots();
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -84,11 +95,7 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
   // ===========================================================================
   Widget _buildMesasGrid({required bool isDesktop}) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection("places")
-          .doc(widget.placeId)
-          .collection("mesas")
-          .snapshots(),
+      stream: _mesasStream,
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(
@@ -209,22 +216,23 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
                           size: 20,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          sector.toUpperCase(),
-                          style: TextStyle(
-                            color: Colors.orangeAccent,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                            shadows: [
-                              Shadow(
-                                color: Colors.orangeAccent.withValues(alpha: 0.5),
-                                blurRadius: 8,
-                              ),
-                            ],
+                        Expanded(
+                          child: Text(
+                            sector.toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.orangeAccent.withValues(alpha: 0.5),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -239,6 +247,17 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add, color: Colors.orangeAccent),
+                          tooltip: "Agregar mesa en este sector",
+                          onPressed: () {
+                            final sectorVal = sector == 'General' ? '' : sector;
+                            _abrirModalGestionMesa(
+                              sectorPreseleccionado: sectorVal,
+                              sectorBloqueado: true,
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -295,7 +314,11 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
                       },
                       onLongPress: () => _abrirModalGestionMesa(id: id, data: data),
                       onEditDesktop: () => _abrirModalGestionMesa(id: id, data: data),
-                      onDeleteDesktop: () => _confirmarEliminar(id),
+                      onDeleteDesktop: () => _confirmarEliminar(
+                        id,
+                        sectorNombre: sector == 'General' ? null : sector,
+                        cantidadEnSector: mesasDelSector.length,
+                      ),
                     );
                   },
                 ),
@@ -311,12 +334,124 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
   // ===========================================================================
   // 🛠️ MODALES Y GESTIÓN (Con Traba de Seguridad)
   // ===========================================================================
-  void _abrirModalGestionMesa({String? id, Map<String, dynamic>? data}) {
+  static String? _normalizeSector(String? s) {
+    if (s == null || s.trim().isEmpty) return null;
+    return s.trim().split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1).toLowerCase()).join(' ');
+  }
+
+  Widget _buildSectorField({
+    required TextEditingController sectorCtrl,
+    required bool sectorBloqueado,
+    required String sectorDisplayValue,
+    required String placeId,
+    required Future<List<String>> sectoresFuture,
+  }) {
+    if (sectorBloqueado) {
+      return TextField(
+        controller: sectorCtrl,
+        readOnly: true,
+        enabled: false,
+        style: const TextStyle(color: Colors.white70),
+        decoration: const InputDecoration(
+          labelText: "Sector",
+          labelStyle: TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+    return FutureBuilder<List<String>>(
+      future: sectoresFuture,
+      builder: (context, snap) {
+        final sectores = snap.data ?? [];
+        return RawAutocomplete<String>(
+          textEditingController: sectorCtrl,
+          optionsBuilder: (value) {
+            final q = value.text.trim();
+            if (q.isEmpty) return sectores;
+            final matches = sectores.where(
+              (s) => s.toLowerCase().contains(q.toLowerCase()),
+            ).toList();
+            if (matches.isEmpty && q.isNotEmpty) return [q];
+            return matches;
+          },
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: "Sector (ej: Patio, VIP)",
+                labelStyle: TextStyle(color: Colors.white70),
+                hintText: "Dejar vacío para 'General' o escribir uno nuevo",
+                hintStyle: TextStyle(color: Colors.white38),
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: const Color(0xFF2C2C2C),
+                borderRadius: BorderRadius.circular(8),
+                elevation: 8,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, i) {
+                      final opt = options.elementAt(i);
+                      return ListTile(
+                        title: Text(opt, style: const TextStyle(color: Colors.white)),
+                        onTap: () => onSelected(opt),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _abrirModalGestionMesa({
+    String? id,
+    Map<String, dynamic>? data,
+    String? sectorPreseleccionado,
+    bool sectorBloqueado = false,
+  }) {
+    final sectorDisplayValue = sectorPreseleccionado != null
+        ? (sectorPreseleccionado.isEmpty ? 'General' : sectorPreseleccionado)
+        : (data?['sector']?.toString() ?? '');
     final nombreCtrl = TextEditingController(text: data?['nombre'] ?? '');
     final capCtrl = TextEditingController(text: data?['capacidad']?.toString() ?? '2');
-    final sectorCtrl = TextEditingController(text: data?['sector']?.toString() ?? '');
+    final sectorCtrl = TextEditingController(text: sectorDisplayValue);
+    final focusNombre = FocusNode();
     String estadoActual = data?['estado'] ?? 'libre';
     bool guardando = false;
+
+    // Pre-compute sectors Future once (not on every dialog rebuild)
+    final sectoresFuture = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('mesas')
+        .get()
+        .then((snap) {
+      final set = <String>{};
+      for (final doc in snap.docs) {
+        final s = doc.data()['sector']?.toString().trim();
+        if (s != null && s.isNotEmpty) set.add(s);
+      }
+      return set.toList()..sort();
+    });
+
+    if (sectorBloqueado && id == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        focusNombre.requestFocus();
+      });
+    }
 
     showDialog(
       context: context,
@@ -335,8 +470,14 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
                     children: [
                       TextField(
                         controller: nombreCtrl,
+                        focusNode: focusNombre,
+                        autofocus: sectorBloqueado,
                         style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(labelText: "Nombre (ej: Mesa 5)", labelStyle: TextStyle(color: Colors.white70)),
+                        decoration: const InputDecoration(
+                          labelText: "Nombre (ej: Mesa 5)",
+                          labelStyle: TextStyle(color: Colors.white70),
+                          hintText: "Número de Mesa",
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
@@ -346,15 +487,12 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
                         decoration: const InputDecoration(labelText: "Capacidad", labelStyle: TextStyle(color: Colors.white70)),
                       ),
                       const SizedBox(height: 10),
-                      TextField(
-                        controller: sectorCtrl,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          labelText: "Sector (ej: Patio, VIP, Planta Alta)",
-                          labelStyle: TextStyle(color: Colors.white70),
-                          hintText: "Dejar vacío para 'General'",
-                          hintStyle: TextStyle(color: Colors.white38),
-                        ),
+                      _buildSectorField(
+                        sectorCtrl: sectorCtrl,
+                        sectorBloqueado: sectorBloqueado,
+                        sectorDisplayValue: sectorDisplayValue,
+                        placeId: widget.placeId,
+                        sectoresFuture: sectoresFuture,
                       ),
                       const SizedBox(height: 25),
                       const Text("Estado Manual:", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
@@ -405,7 +543,11 @@ class _MesasMobileState extends State<MesasMobile> with MesasLogicMixin {
               actions: [
                 if (id != null && !guardando)
                   TextButton(
-                    onPressed: () => _confirmarEliminar(id),
+                    onPressed: () => _confirmarEliminar(
+                      id,
+                      sectorNombre: data?['sector']?.toString(),
+                      onAfterDelete: () => Navigator.pop(ctx),
+                    ),
                     child: const Text("Eliminar", style: TextStyle(color: Colors.redAccent)),
                   ),
                 TextButton(
@@ -465,11 +607,15 @@ ElevatedButton(
     setDialogState(() => guardando = true);
 
     try {
+      final sectorRaw = sectorCtrl.text.trim();
+      final sectorValue = (sectorRaw.isEmpty || sectorRaw.toLowerCase() == 'general')
+          ? null
+          : _normalizeSector(sectorRaw);
       final Map<String, dynamic> payload = {
         "nombre": nombreCtrl.text.trim(),
         "capacidad": int.tryParse(capCtrl.text) ?? 2,
         "estado": estadoActual,
-        "sector": sectorCtrl.text.trim().isEmpty ? null : sectorCtrl.text.trim(),
+        "sector": sectorValue,
       };
       
       // Al liberar, limpiamos los campos de sesión
@@ -477,7 +623,10 @@ ElevatedButton(
         payload["clienteActivo"] = FieldValue.delete();
         payload["reservaIdActiva"] = FieldValue.delete();
         payload["fechaOcupacion"] = FieldValue.delete();
-        // payload["pedidoId"] = FieldValue.delete(); // Si manejas el ID del pedido aquí también
+        await MesasLogicMixin.cancelarOrdenesPendientesCocina(
+          placeId: widget.placeId,
+          mesaId: id,
+        );
       }
 
       final ref = FirebaseFirestore.instance
@@ -515,26 +664,70 @@ ElevatedButton(
   }
 
 
-  void _confirmarEliminar(String id) {
+  void _confirmarEliminar(
+    String id, {
+    String? sectorNombre,
+    int cantidadEnSector = 0,
+    VoidCallback? onAfterDelete,
+  }) {
+    final esUltimaDelSector = cantidadEnSector == 1 && sectorNombre != null && sectorNombre != 'General';
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
         title: const Text("¿Eliminar mesa?", style: TextStyle(color: Colors.white)),
-        content: const Text("Esta acción borrará el historial asociado a esta mesa física.", style: TextStyle(color: Colors.white70)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Esta acción borrará el historial asociado a esta mesa física.",
+              style: TextStyle(color: Colors.white70),
+            ),
+            if (esUltimaDelSector) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orangeAccent, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Es la última mesa del sector \"$sectorNombre\". Si la eliminas, el sector desaparecerá de la vista.",
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
-              FirebaseFirestore.instance.collection("places").doc(widget.placeId).collection("mesas").doc(id).delete();
+            onPressed: () async {
               Navigator.pop(context); // Cierra confirmación
-              Navigator.pop(context); // Cierra modal gestión
+              try {
+                await FirebaseFirestore.instance.collection("places").doc(widget.placeId).collection("mesas").doc(id).delete();
+                onAfterDelete?.call(); // Cierra modal gestión si viene de ahí
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Error al eliminar mesa: $e"), backgroundColor: Colors.redAccent),
+                );
+              }
             },
             child: const Text("Eliminar"),
           ),
         ],
-      )
+      ),
     );
   }
 }

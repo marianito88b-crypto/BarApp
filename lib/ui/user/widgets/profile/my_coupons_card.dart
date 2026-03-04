@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 /// Widget que muestra los cupones/regalos del usuario
-class MyCouponsCard extends StatelessWidget {
+class MyCouponsCard extends StatefulWidget {
   final String? userId;
 
   const MyCouponsCard({
@@ -14,17 +14,33 @@ class MyCouponsCard extends StatelessWidget {
   });
 
   @override
+  State<MyCouponsCard> createState() => _MyCouponsCardState();
+}
+
+class _MyCouponsCardState extends State<MyCouponsCard> {
+  late final String? _currentUserId;
+  late final Future<String>? _collectionFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUserId = widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
+    _collectionFuture = _currentUserId != null
+        ? _resolveUserCollection(_currentUserId)
+        : null;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final currentUserId = userId ?? FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserId == null) return const SizedBox.shrink();
+    if (_currentUserId == null) return const SizedBox.shrink();
 
     return FutureBuilder<String>(
-      future: _resolveUserCollection(currentUserId),
+      future: _collectionFuture,
       builder: (context, colSnap) {
         if (!colSnap.hasData) return const SizedBox.shrink();
         final collection = colSnap.data!;
         return StreamBuilder<QuerySnapshot>(
-          stream: _getCouponsStream(currentUserId, collection),
+          stream: _getCouponsStream(_currentUserId, collection),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
               return const SizedBox.shrink();

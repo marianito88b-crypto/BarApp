@@ -37,17 +37,17 @@ mixin MesasLogicMixin {
     return a.length.compareTo(b.length);
   }
 
+  /// Normaliza el nombre del sector para consistencia (Patio/patio -> Patio).
+  static String _normalizeSectorKey(String s) {
+    if (s.isEmpty) return s;
+    return s.trim().split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1).toLowerCase()).join(' ');
+  }
+
   /// Agrupa documentos de Firebase por su campo 'sector'.
   /// 
   /// Si un documento no tiene campo 'sector' o está vacío, se agrupa bajo la clave 'Sin Sector'.
   /// Nota: En la UI se convierte 'Sin Sector' a 'General' para mejor UX.
-  /// 
-  /// Parámetros:
-  /// - [docs]: Lista de DocumentSnapshot a agrupar
-  /// 
-  /// Retorna:
-  /// - Map donde la clave es el nombre del sector y el valor es la lista de documentos
-  ///   pertenecientes a ese sector
+  /// Usa normalización para que 'Patio' y 'patio' se traten como el mismo sector.
   Map<String, List<DocumentSnapshot>> agruparPorSector(
       List<DocumentSnapshot> docs) {
     final Map<String, List<DocumentSnapshot>> grupos = {};
@@ -57,7 +57,7 @@ mixin MesasLogicMixin {
       final String? sectorRaw = data?['sector']?.toString().trim();
       final String sector = (sectorRaw == null || sectorRaw.isEmpty)
           ? 'Sin Sector'
-          : sectorRaw;
+          : _normalizeSectorKey(sectorRaw);
 
       if (!grupos.containsKey(sector)) {
         grupos[sector] = [];
@@ -66,5 +66,29 @@ mixin MesasLogicMixin {
     }
 
     return grupos;
+  }
+
+  /// Marca como cancelado por mozo los pedidos que estaban en cocina para esta mesa.
+  /// Debe llamarse cuando el mozo libera/resetea una mesa con pedidos pendientes.
+  static Future<void> cancelarOrdenesPendientesCocina({
+    required String placeId,
+    required String mesaId,
+  }) async {
+    final ordersSnap = await FirebaseFirestore.instance
+        .collection('places')
+        .doc(placeId)
+        .collection('orders')
+        .where('mesaId', isEqualTo: mesaId)
+        .where('estado', whereIn: ['pendiente', 'en_preparacion'])
+        .get();
+    if (ordersSnap.docs.isEmpty) return;
+    final batch = FirebaseFirestore.instance.batch();
+    for (final doc in ordersSnap.docs) {
+      batch.update(doc.reference, {
+        'estado': 'cancelado_por_mozo',
+        'canceladoAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
   }
 }

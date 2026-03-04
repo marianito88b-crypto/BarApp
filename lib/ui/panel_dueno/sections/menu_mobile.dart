@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../logic/menu_logic.dart';
 import '../layouts/menu/menu_mobile_layout.dart';
@@ -15,6 +16,14 @@ class _MenuMobileState extends State<MenuMobile> with MenuLogicMixin {
   @override
   String get placeId => widget.placeId;
 
+  late final Stream<QuerySnapshot> _menuStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuStream = getMenuStream();
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -23,6 +32,7 @@ class _MenuMobileState extends State<MenuMobile> with MenuLogicMixin {
         return Scaffold(
           backgroundColor: Colors.transparent,
           floatingActionButton: FloatingActionButton.extended(
+            heroTag: "fab_menu_mobile",
             onPressed: () => showProductEditor(),
             backgroundColor: Colors.orangeAccent,
             icon: Icon(
@@ -40,7 +50,7 @@ class _MenuMobileState extends State<MenuMobile> with MenuLogicMixin {
           body: isDesktop
               ? MenuDesktopLayout(
                   placeId: placeId,
-                  menuStream: getMenuStream(),
+                  menuStream: _menuStream,
                   onEditProduct: (docId, data) => showProductEditor(
                     docId: docId,
                     data: data,
@@ -49,7 +59,7 @@ class _MenuMobileState extends State<MenuMobile> with MenuLogicMixin {
                 )
               : MenuMobileLayout(
                   placeId: placeId,
-                  menuStream: getMenuStream(),
+                  menuStream: _menuStream,
                   onEditProduct: (docId, data) => showProductEditor(
                     docId: docId,
                     data: data,

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:barapp/ui/panel_dueno/widgets/owner_nav_bar.dart';
 
 /// Layout desktop del panel de dueño con sidebar.
-class OwnerDesktopLayout extends StatelessWidget {
+class OwnerDesktopLayout extends StatefulWidget {
   final List<NavItem> navItems;
   final int currentIndex;
   final Map<String, dynamic> placeData;
@@ -31,6 +31,25 @@ class OwnerDesktopLayout extends StatelessWidget {
     required this.onNavTap,
     required this.onShowLockedDialog,
   });
+
+  @override
+  State<OwnerDesktopLayout> createState() => _OwnerDesktopLayoutState();
+}
+
+class _OwnerDesktopLayoutState extends State<OwnerDesktopLayout> {
+  late final Stream<QuerySnapshot> _cajaStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _cajaStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('caja_sesiones')
+        .where('estado', isEqualTo: 'abierta')
+        .limit(1)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +91,7 @@ class OwnerDesktopLayout extends StatelessWidget {
                     border: Border.all(color: accent.withValues(alpha: 0.3)),
                   ),
                   child: Text(
-                    userRole.toUpperCase(),
+                    widget.userRole.toUpperCase(),
                     style: TextStyle(
                       color: accent,
                       fontSize: 10,
@@ -81,7 +100,7 @@ class OwnerDesktopLayout extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                if (daysLeft > 0)
+                if (widget.daysLeft > 0)
                   Container(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -101,7 +120,7 @@ class OwnerDesktopLayout extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            "$daysLeft días de prueba",
+                            "${widget.daysLeft} días de prueba",
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -111,7 +130,7 @@ class OwnerDesktopLayout extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (daysLeft == 0)
+                if (widget.daysLeft == 0)
                   Container(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -138,7 +157,7 @@ class OwnerDesktopLayout extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (daysLeft == -1)
+                if (widget.daysLeft == -1)
                   Container(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -175,9 +194,9 @@ class OwnerDesktopLayout extends StatelessWidget {
                   ),
                 const SizedBox(height: 15),
                 TextButton.icon(
-                  onPressed: onToggleAudio,
+                  onPressed: widget.onToggleAudio,
                   style: TextButton.styleFrom(
-                    backgroundColor: audioEnabled
+                    backgroundColor: widget.audioEnabled
                         ? Colors.green.withValues(alpha: 0.1)
                         : Colors.red.withValues(alpha: 0.1),
                     padding: const EdgeInsets.symmetric(
@@ -186,34 +205,28 @@ class OwnerDesktopLayout extends StatelessWidget {
                     ),
                   ),
                   icon: Icon(
-                    audioEnabled ? Icons.volume_up : Icons.volume_off,
-                    color: audioEnabled ? Colors.green : Colors.red,
+                    widget.audioEnabled ? Icons.volume_up : Icons.volume_off,
+                    color: widget.audioEnabled ? Colors.green : Colors.red,
                     size: 16,
                   ),
                   label: Text(
-                    audioEnabled ? "SONIDO ON" : "ACTIVAR SONIDO",
+                    widget.audioEnabled ? "SONIDO ON" : "ACTIVAR SONIDO",
                     style: TextStyle(
-                      color: audioEnabled ? Colors.green : Colors.red,
+                      color: widget.audioEnabled ? Colors.green : Colors.red,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
-                if (userRole == 'admin' || userRole == 'cajero')
+                if (widget.userRole == 'admin' || widget.userRole == 'cajero')
                   StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('places')
-                        .doc(placeId)
-                        .collection('caja_sesiones')
-                        .where('estado', isEqualTo: 'abierta')
-                        .limit(1)
-                        .snapshots(),
+                    stream: _cajaStream,
                     builder: (context, snapshot) {
                       bool isAbierta =
                           snapshot.hasData && snapshot.data!.docs.isNotEmpty;
                       bool isCajaLocked =
-                          !isFeatureEnabled('Caja', placeData);
+                          !widget.isFeatureEnabled('Caja', widget.placeData);
 
                       return Container(
                         margin: const EdgeInsets.symmetric(
@@ -268,12 +281,12 @@ class OwnerDesktopLayout extends StatelessWidget {
                           ),
                           onPressed: () {
                             if (isCajaLocked) {
-                              onShowLockedDialog();
+                              widget.onShowLockedDialog();
                               return;
                             }
                             int cajaIndex =
-                                navItems.indexWhere((item) => item.label == "Caja");
-                            if (cajaIndex != -1) onNavTap(cajaIndex);
+                                widget.navItems.indexWhere((item) => item.label == "Caja");
+                            if (cajaIndex != -1) widget.onNavTap(cajaIndex);
                           },
                         ),
                       );
@@ -283,17 +296,17 @@ class OwnerDesktopLayout extends StatelessWidget {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: navItems.length,
+                    itemCount: widget.navItems.length,
                     itemBuilder: (_, i) {
-                      final bool isSelected = i == currentIndex;
-                      final item = navItems[i];
+                      final bool isSelected = i == widget.currentIndex;
+                      final item = widget.navItems[i];
                       bool isLocked =
-                          !isFeatureEnabled(item.label, placeData);
+                          !widget.isFeatureEnabled(item.label, widget.placeData);
 
                       return InkWell(
                         onTap: isLocked
-                            ? onShowLockedDialog
-                            : () => onNavTap(i),
+                            ? widget.onShowLockedDialog
+                            : () => widget.onNavTap(i),
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -364,8 +377,8 @@ class OwnerDesktopLayout extends StatelessWidget {
           ),
           Expanded(
             child: IndexedStack(
-              index: currentIndex,
-              children: navItems.map((e) => e.widget).toList(),
+              index: widget.currentIndex,
+              children: widget.navItems.map((e) => e.widget).toList(),
             ),
           ),
         ],

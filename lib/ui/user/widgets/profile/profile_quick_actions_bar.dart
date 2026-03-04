@@ -230,10 +230,26 @@ class _GlassActionButton extends StatelessWidget {
 }
 
 /// Modal para gestionar mis negocios
-class _MyBusinessesModal extends StatelessWidget {
+class _MyBusinessesModal extends StatefulWidget {
   final String uid;
 
   const _MyBusinessesModal({required this.uid});
+
+  @override
+  State<_MyBusinessesModal> createState() => _MyBusinessesModalState();
+}
+
+class _MyBusinessesModalState extends State<_MyBusinessesModal> {
+  late final Stream<QuerySnapshot> _placesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placesStream = FirebaseFirestore.instance
+        .collection('places')
+        .where('ownerId', isEqualTo: widget.uid)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -280,10 +296,7 @@ class _MyBusinessesModal extends StatelessWidget {
             // Lista de negocios
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('places')
-                    .where('ownerId', isEqualTo: uid)
-                    .snapshots(),
+                stream: _placesStream,
                 builder: (context, snap) {
                   if (!snap.hasData) {
                     return const Center(

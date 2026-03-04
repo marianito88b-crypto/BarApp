@@ -3,8 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:barapp/ui/community/post_card_general.dart'; // Asegúrate de que esta ruta sea correcta
 
-class ReportsAdminScreen extends StatelessWidget {
+class ReportsAdminScreen extends StatefulWidget {
   const ReportsAdminScreen({super.key});
+
+  @override
+  State<ReportsAdminScreen> createState() => _ReportsAdminScreenState();
+}
+
+class _ReportsAdminScreenState extends State<ReportsAdminScreen> {
+  late final Stream<QuerySnapshot> _reportsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _reportsStream = FirebaseFirestore.instance
+        .collection('reports')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,10 +31,7 @@ class ReportsAdminScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF1E1E1E),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('reports')
-            .orderBy('timestamp', descending: true)
-            .snapshots(),
+        stream: _reportsStream,
         builder: (context, snapshot) {
           if (snapshot.hasError) return const Center(child: Text("Error de permisos en Firestore", style: TextStyle(color: Colors.red)));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());

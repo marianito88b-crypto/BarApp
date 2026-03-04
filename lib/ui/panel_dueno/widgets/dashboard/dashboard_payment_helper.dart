@@ -206,7 +206,7 @@ void mostrarDetallePago(
             if (data['origen'] == 'app' && orderId != null && placeId != null) ...[
               const SizedBox(height: 16),
               const Divider(color: Colors.white10),
-              _buildRateClientButton(ctx, data, placeId, orderId),
+              _RateClientButton(data: data, placeId: placeId, orderId: orderId),
             ],
           ],
         ),
@@ -224,21 +224,53 @@ void mostrarDetallePago(
   );
 }
 
+/// StatefulWidget wrapper for rate client button that caches the future
+class _RateClientButton extends StatefulWidget {
+  final Map<String, dynamic> data;
+  final String placeId;
+  final String orderId;
+
+  const _RateClientButton({
+    required this.data,
+    required this.placeId,
+    required this.orderId,
+  });
+
+  @override
+  State<_RateClientButton> createState() => _RateClientButtonState();
+}
+
+class _RateClientButtonState extends State<_RateClientButton> {
+  late final Future<DocumentSnapshot> _orderFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _orderFuture = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('orders')
+        .doc(widget.orderId)
+        .get();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _buildRateClientButton(context, widget.data, widget.placeId, widget.orderId, _orderFuture);
+  }
+}
+
 /// Botón para calificar al cliente desde el historial de ventas
 Widget _buildRateClientButton(
   BuildContext context,
   Map<String, dynamic> data,
   String placeId,
   String orderId,
+  Future<DocumentSnapshot> orderFuture,
 ) {
   // Obtener userId del pedido original
   return FutureBuilder<DocumentSnapshot>(
-    future: FirebaseFirestore.instance
-        .collection('places')
-        .doc(placeId)
-        .collection('orders')
-        .doc(orderId)
-        .get(),
+    future: orderFuture,
     builder: (context, snapshot) {
       if (!snapshot.hasData || !snapshot.data!.exists) {
         return const SizedBox.shrink();

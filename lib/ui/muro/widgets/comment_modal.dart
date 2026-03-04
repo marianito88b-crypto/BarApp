@@ -20,11 +20,18 @@ class CommentModal extends StatefulWidget {
 class _CommentModalState extends State<CommentModal> {
   final _ctrl = TextEditingController();
   bool _sending = false;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _commentsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentsStream = widget.postRef.collection('comments')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final commentsCol = widget.postRef.collection('comments');
-
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -52,9 +59,7 @@ class _CommentModalState extends State<CommentModal> {
             // Lista
             Flexible(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: commentsCol
-                    .orderBy('timestamp', descending: true)
-                    .snapshots(),
+                stream: _commentsStream,
                 builder: (context, snap) {
                   final docs = snap.data?.docs ?? [];
                   if (docs.isEmpty) {

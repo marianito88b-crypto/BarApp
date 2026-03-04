@@ -76,10 +76,18 @@ class _UserOrdersList extends StatefulWidget {
 
 class _UserOrdersListState extends State<_UserOrdersList>
     with ClientOrdersLogicMixin {
+  late final Stream<QuerySnapshot> _ordersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _ordersStream = getOrdersStream(widget.userId, widget.active);
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: getOrdersStream(widget.userId, widget.active),
+      stream: _ordersStream,
       builder: (context, snap) {
         if (snap.hasError) {
           debugPrint("Error ClientOrders: ${snap.error}");

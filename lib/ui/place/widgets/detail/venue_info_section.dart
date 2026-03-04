@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:barapp/ui/widgets/user_avatar.dart';
 
 /// Sección de información del lugar
 /// 
 /// Muestra puntuación, distancia, descripción y contador de seguidores
-class VenueInfoSection extends StatelessWidget {
+class VenueInfoSection extends StatefulWidget {
   final String placeId;
   final String? description;
   final double? distanceInMeters;
@@ -25,6 +26,30 @@ class VenueInfoSection extends StatelessWidget {
   });
 
   @override
+  State<VenueInfoSection> createState() => _VenueInfoSectionState();
+}
+
+class _VenueInfoSectionState extends State<VenueInfoSection> {
+  late final Stream<DocumentSnapshot<Map<String, dynamic>>> _placeStream;
+  late final Stream<QuerySnapshot> _followersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placeStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+    _followersStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('followers')
+        .orderBy('followedAt', descending: true)
+        .limit(8)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,10 +59,7 @@ class VenueInfoSection extends StatelessWidget {
           children: [
             // Puntuación
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('places')
-                  .doc(placeId)
-                  .snapshots(),
+              stream: _placeStream,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const SizedBox.shrink();
                 final data = snapshot.data!.data();
@@ -73,7 +95,7 @@ class VenueInfoSection extends StatelessWidget {
             ),
             const Spacer(),
             // Distancia
-            if (distanceInMeters != null && distanceInMeters!.isFinite)
+            if (widget.distanceInMeters != null && widget.distanceInMeters!.isFinite)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
@@ -91,7 +113,7 @@ class VenueInfoSection extends StatelessWidget {
                         color: Colors.white70, size: 16),
                     const SizedBox(width: 4),
                     Text(
-                      formatDistance(distanceInMeters!),
+                      widget.formatDistance(widget.distanceInMeters!),
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 12,
@@ -111,7 +133,7 @@ class VenueInfoSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _buildFollowersSection(placeId),
+              child: _buildFollowersSection(widget.placeId),
             ),
             // Iconos de redes sociales a la derecha de seguidores (debajo de la distancia)
             const SizedBox(width: 12),
@@ -122,7 +144,7 @@ class VenueInfoSection extends StatelessWidget {
         const SizedBox(height: 20),
 
         // 3. DESCRIPCIÓN DEL LUGAR
-        if (description != null && description!.trim().isNotEmpty) ...[
+        if (widget.description != null && widget.description!.trim().isNotEmpty) ...[
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -144,7 +166,7 @@ class VenueInfoSection extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  description!,
+                  widget.description!,
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 13,
@@ -166,10 +188,7 @@ class VenueInfoSection extends StatelessWidget {
       children: [
         // CONTADOR
         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('places')
-              .doc(placeId)
-              .snapshots(),
+          stream: _placeStream,
           builder: (context, snapshot) {
             final count = snapshot.data?.data()?['followersCount'] ?? 0;
             return Text(
@@ -187,13 +206,7 @@ class VenueInfoSection extends StatelessWidget {
 
         // AVATARES (LIMITADOS)
         StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('places')
-              .doc(placeId)
-              .collection('followers')
-              .orderBy('followedAt', descending: true)
-              .limit(8)
-              .snapshots(),
+          stream: _followersStream,
           builder: (context, snapshot) {
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return const SizedBox.shrink();
@@ -206,15 +219,7 @@ class VenueInfoSection extends StatelessWidget {
 
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.white10,
-                    backgroundImage:
-                        img != null && img.isNotEmpty ? NetworkImage(img) : null,
-                    child: img == null
-                        ? const Icon(Icons.person, size: 16, color: Colors.white54)
-                        : null,
-                  ),
+                  child: UserAvatar(imageUrl: img, radius: 18),
                 );
               }).toList(),
             );
@@ -226,8 +231,8 @@ class VenueInfoSection extends StatelessWidget {
 
   /// Construye los iconos de redes sociales (WhatsApp e Instagram)
   Widget _buildSocialIcons() {
-    final String whatsapp = placeData['whatsapp'] ?? '';
-    final String instagram = placeData['instagram'] ?? '';
+    final String whatsapp = widget.placeData['whatsapp'] ?? '';
+    final String instagram = widget.placeData['instagram'] ?? '';
 
     // Si no hay ninguna red social configurada, no mostrar nada
     if (whatsapp.isEmpty && instagram.isEmpty) {
@@ -245,7 +250,7 @@ class VenueInfoSection extends StatelessWidget {
           onTap: whatsapp.isNotEmpty
               ? () async {
                   final cleanNum = whatsapp.replaceAll(RegExp(r'[^0-9]'), '');
-                  await onLaunchUrl("https://wa.me/$cleanNum");
+                  await widget.onLaunchUrl("https://wa.me/$cleanNum");
                 }
               : () {
                   // No necesitamos mostrar snackbar aquí porque el icono ya indica que no está disponible
@@ -260,7 +265,7 @@ class VenueInfoSection extends StatelessWidget {
           onTap: instagram.isNotEmpty
               ? () async {
                   final user = instagram.replaceAll('@', '').trim();
-                  await onLaunchUrl("https://instagram.com/$user");
+                  await widget.onLaunchUrl("https://instagram.com/$user");
                 }
               : () {
                   // No necesitamos mostrar snackbar aquí porque el icono ya indica que no está disponible

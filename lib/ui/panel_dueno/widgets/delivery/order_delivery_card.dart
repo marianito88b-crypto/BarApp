@@ -538,7 +538,7 @@ class _OrderDeliveryCardState extends State<OrderDeliveryCard>
             style: IconButton.styleFrom(backgroundColor: Colors.white10),
             icon: const Icon(Icons.receipt, color: Colors.white),
             tooltip: "Imprimir Ticket Cliente",
-            onPressed: () => printCliente(widget.data),
+            onPressed: () => printCliente({...widget.data, 'orderId': widget.docId}),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -591,7 +591,7 @@ class _OrderDeliveryCardState extends State<OrderDeliveryCard>
           IconButton(
             style: IconButton.styleFrom(backgroundColor: Colors.white10),
             icon: const Icon(Icons.receipt, color: Colors.white),
-            onPressed: () => printCliente(widget.data),
+            onPressed: () => printCliente({...widget.data, 'orderId': widget.docId}),
             tooltip: "Imprimir Ticket",
           ),
           const SizedBox(width: 8),

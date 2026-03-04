@@ -36,6 +36,18 @@ class _AddGastoModalState extends State<AddGastoModal> {
   String metodoPago = 'efectivo';
   bool isLoading = false;
 
+  late final Stream<QuerySnapshot> _proveedoresStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _proveedoresStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('proveedores')
+        .snapshots();
+  }
+
   @override
   void dispose() {
     montoController.dispose();
@@ -68,11 +80,7 @@ class _AddGastoModalState extends State<AddGastoModal> {
             const SizedBox(height: 20),
 
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('places')
-                  .doc(widget.placeId)
-                  .collection('proveedores')
-                  .snapshots(),
+              stream: _proveedoresStream,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const LinearProgressIndicator();

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 /// Banner que muestra los límites de notificaciones disponibles
-class NotificationLimitsBanner extends StatelessWidget {
+class NotificationLimitsBanner extends StatefulWidget {
   final String placeId;
 
   const NotificationLimitsBanner({
@@ -12,13 +12,26 @@ class NotificationLimitsBanner extends StatelessWidget {
   });
 
   @override
+  State<NotificationLimitsBanner> createState() => _NotificationLimitsBannerState();
+}
+
+class _NotificationLimitsBannerState extends State<NotificationLimitsBanner> {
+  late final Stream<DocumentSnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Escuchamos al LOCAL para ver si tiene límites custom o plan especial
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .snapshots(),
+      stream: _stream,
       builder: (context, placeSnap) {
         // Valores por defecto
         int limitGlobal = 1;
@@ -47,7 +60,7 @@ class NotificationLimitsBanner extends StatelessWidget {
           child: Column(
             children: [
               LimitRow(
-                placeId: placeId,
+                placeId: widget.placeId,
                 type: 'global',
                 label: "Notificación GLOBAL (Todos los usuarios)",
                 limitReal: limitGlobal, // 🔥 PASAMOS EL LÍMITE CALCULADO
@@ -56,7 +69,7 @@ class NotificationLimitsBanner extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               LimitRow(
-                placeId: placeId,
+                placeId: widget.placeId,
                 type: 'followers',
                 label: "Notificación SEGUIDORES (Tus fans)",
                 limitReal: limitFollowers, // 🔥 PASAMOS EL LÍMITE CALCULADO
@@ -72,7 +85,7 @@ class NotificationLimitsBanner extends StatelessWidget {
 }
 
 /// Fila individual que muestra el límite de un tipo de notificación
-class LimitRow extends StatelessWidget {
+class LimitRow extends StatefulWidget {
   final String placeId;
   final String type;
   final String label;
@@ -91,18 +104,31 @@ class LimitRow extends StatelessWidget {
   });
 
   @override
+  State<LimitRow> createState() => _LimitRowState();
+}
+
+class _LimitRowState extends State<LimitRow> {
+  late final Stream<DocumentSnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection('notification_limits')
+        .doc('${widget.placeId}_${widget.type}')
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('notification_limits')
-          .doc('${placeId}_$type')
-          .snapshots(),
+      stream: _stream,
       builder: (context, snap) {
         final data = snap.data?.data() as Map<String, dynamic>?;
         final int used = data?['count'] ?? 0;
 
         // Cálculo visual
-        final int remaining = (limitReal - used).clamp(0, limitReal);
+        final int remaining = (widget.limitReal - used).clamp(0, widget.limitReal);
 
         Color color = remaining > 0 ? Colors.greenAccent : Colors.grey;
         if (remaining == 0) color = Colors.white24;
@@ -122,7 +148,7 @@ class LimitRow extends StatelessWidget {
                   color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 16),
+                child: Icon(widget.icon, color: color, size: 16),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -130,7 +156,7 @@ class LimitRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      label,
+                      widget.label,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -149,7 +175,7 @@ class LimitRow extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          " / $limitReal ($periodo)", // Muestra el total real (ej: / 10)
+                          " / ${widget.limitReal} (${widget.periodo})", // Muestra el total real (ej: / 10)
                           style: const TextStyle(
                             color: Colors.white38,
                             fontSize: 11,

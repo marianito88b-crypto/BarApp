@@ -285,9 +285,14 @@ class _ModalProcesarPagoState extends State<ModalProcesarPago> {
             backgroundColor: completado ? Colors.greenAccent : Colors.grey,
             foregroundColor: Colors.black
           ),
-          onPressed: completado 
-            ? () => Navigator.pop(context, _pagosRegistrados) 
-            : null, 
+          onPressed: completado
+            ? () => Navigator.pop(context, {
+                'pagos': _pagosRegistrados,
+                'totalFinal': _totalConDescuento,
+                'descuentoAplicado': _descuentoAplicado,
+                'codigoAplicado': _codigoAplicado,
+              })
+            : null,
           child: const Text("CONFIRMAR PAGO"),
         ),
       ],

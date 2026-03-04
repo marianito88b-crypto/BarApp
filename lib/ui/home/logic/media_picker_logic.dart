@@ -29,10 +29,25 @@ class MediaPickerLogic {
           maxHeight: 1920,
         );
       } else {
-        // Para galería, sí usamos pickMedia (permite seleccionar foto O video)
-        file = await picker.pickMedia(
-          imageQuality: 80, // Esto solo comprime si el usuario elige una imagen
+        // Para galería: selección múltiple de imágenes y videos
+        final files = await picker.pickMultipleMedia(
+          imageQuality: 80,
         );
+        if (files.isEmpty) return;
+        if (files.length == 1) {
+          file = files.first;
+        } else {
+          // Múltiples archivos: navegar a pantalla de carga múltiple
+          if (!context.mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => StoryUploadScreen(
+                files: files,
+              ),
+            ),
+          );
+          return;
+        }
       }
     } catch (e) {
       debugPrint('Error al abrir cámara/galería: $e');

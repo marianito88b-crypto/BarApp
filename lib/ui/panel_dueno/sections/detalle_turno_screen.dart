@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class DetalleTurnoScreen extends StatelessWidget {
+class DetalleTurnoScreen extends StatefulWidget {
   final String placeId;
   final DateTime fechaInicio;
   final DateTime? fechaFin;
@@ -17,10 +17,32 @@ class DetalleTurnoScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    // Si fechaFin es null (turno abierto), usamos Now
-    final DateTime end = fechaFin ?? DateTime.now();
+  State<DetalleTurnoScreen> createState() => _DetalleTurnoScreenState();
+}
 
+class _DetalleTurnoScreenState extends State<DetalleTurnoScreen> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    // Si fechaFin es null (turno abierto), usamos Now
+    final DateTime end = widget.fechaFin ?? DateTime.now();
+    _stream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('ventas')
+        .where(
+          'fecha',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(widget.fechaInicio),
+        )
+        .where('fecha', isLessThanOrEqualTo: Timestamp.fromDate(end))
+        .orderBy('fecha', descending: true)
+        .snapshots();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -32,17 +54,7 @@ class DetalleTurnoScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('places')
-            .doc(placeId)
-            .collection('ventas')
-            .where(
-              'fecha',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(fechaInicio),
-            )
-            .where('fecha', isLessThanOrEqualTo: Timestamp.fromDate(end))
-            .orderBy('fecha', descending: true)
-            .snapshots(),
+        stream: _stream,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(

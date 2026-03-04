@@ -16,6 +16,20 @@ class BlockedUsersScreen extends StatefulWidget {
 
 class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
+  late final Stream<QuerySnapshot>? _blockedUsersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _blockedUsersStream = _currentUser != null
+        ? FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(_currentUser.uid)
+            .collection('blockedUsers')
+            .orderBy('blockedAt', descending: true)
+            .snapshots()
+        : null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,12 +46,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
         title: const Text("Usuarios Bloqueados", style: TextStyle(color: Colors.white)),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(_currentUser.uid)
-            .collection('blockedUsers') // Esta es la colección correcta
-            .orderBy('blockedAt', descending: true)
-            .snapshots(),
+        stream: _blockedUsersStream,
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.orangeAccent));
           

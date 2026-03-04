@@ -15,18 +15,25 @@ class VentaProductosTab extends StatefulWidget {
 class _VentaProductosTabState extends State<VentaProductosTab>
     with VentaExternaCartMixin {
 
+  late final Stream<QuerySnapshot> _menuStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('menu')
+        .orderBy('categoria')
+        .snapshots();
+  }
  
   // =========================================================
   // 📦 SELECTOR DE PRODUCTOS
   // =========================================================
   Widget _buildProductSelector() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(widget.placeId)
-          .collection('menu')
-          .orderBy('categoria')
-          .snapshots(),
+      stream: _menuStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(

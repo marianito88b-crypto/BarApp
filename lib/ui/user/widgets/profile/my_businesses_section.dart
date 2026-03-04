@@ -7,8 +7,27 @@ import 'package:barapp/ui/place/place_detail_screen.dart';
 /// Sección modernizada de negocios del usuario
 /// 
 /// Usa tarjetas redondeadas con bordes neón sutiles
-class MyBusinessesSection extends StatelessWidget {
+class MyBusinessesSection extends StatefulWidget {
   const MyBusinessesSection({super.key});
+
+  @override
+  State<MyBusinessesSection> createState() => _MyBusinessesSectionState();
+}
+
+class _MyBusinessesSectionState extends State<MyBusinessesSection> {
+  Stream<QuerySnapshot>? _businessesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _businessesStream = FirebaseFirestore.instance
+          .collection('places')
+          .where('ownerId', isEqualTo: uid)
+          .snapshots();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,10 +35,7 @@ class MyBusinessesSection extends StatelessWidget {
     if (uid == null) return const SizedBox.shrink();
 
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .where('ownerId', isEqualTo: uid)
-          .snapshots(),
+      stream: _businessesStream,
       builder: (context, snap) {
         if (!snap.hasData) return const SizedBox.shrink();
         final docs = snap.data!.docs;

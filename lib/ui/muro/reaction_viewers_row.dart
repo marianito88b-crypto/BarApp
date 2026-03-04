@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:barapp/ui/widgets/user_avatar.dart';
 
-class ReactionViewersRowGeneral extends StatelessWidget {
+class ReactionViewersRowGeneral extends StatefulWidget {
   final DocumentReference postReference;
   final void Function(String userId, String displayName, String photoUrl)? onUserTap;
 
@@ -12,9 +13,22 @@ class ReactionViewersRowGeneral extends StatelessWidget {
   });
 
   @override
+  State<ReactionViewersRowGeneral> createState() => _ReactionViewersRowGeneralState();
+}
+
+class _ReactionViewersRowGeneralState extends State<ReactionViewersRowGeneral> {
+  late final Stream<DocumentSnapshot> _postStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _postStream = widget.postReference.snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: postReference.snapshots(),
+      stream: _postStream,
       builder: (context, snap) {
         // Validaciones iniciales para no ensuciar el log
         if (snap.hasError || !snap.hasData || !snap.data!.exists) {
@@ -75,20 +89,13 @@ class ReactionViewersRowGeneral extends StatelessWidget {
                     padding: const EdgeInsets.only(right: 4),
                     child: GestureDetector(
                       onTap: () {
-                        if (onUserTap != null) {
-                          onUserTap!(doc.id, name, avatarUrl);
+                        if (widget.onUserTap != null) {
+                          widget.onUserTap!(doc.id, name, avatarUrl);
                         }
                       },
-                      child: CircleAvatar(
+                      child: UserAvatar(
+                        imageUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
                         radius: 14,
-                        backgroundColor: const Color(0xFF222222),
-                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                        child: avatarUrl.isEmpty
-                            ? Text(
-                                name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                                style: const TextStyle(fontSize: 12, color: Colors.white),
-                              )
-                            : null,
                       ),
                     ),
                   );

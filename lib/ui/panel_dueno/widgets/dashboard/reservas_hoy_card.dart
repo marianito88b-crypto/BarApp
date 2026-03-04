@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:barapp/ui/panel_dueno/sections/reservas_mobile.dart';
 
 /// Tarjeta detallada de reservas del día.
-class ReservasHoyDetailedCard extends StatelessWidget {
+class ReservasHoyDetailedCard extends StatefulWidget {
   final String placeId;
   final bool isDesktop;
   final Function(String tabName)? onNavigateToTab;
@@ -16,7 +16,15 @@ class ReservasHoyDetailedCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  State<ReservasHoyDetailedCard> createState() => _ReservasHoyDetailedCardState();
+}
+
+class _ReservasHoyDetailedCardState extends State<ReservasHoyDetailedCard> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
     const int horaCorte = 6;
     final now = DateTime.now();
     DateTime fechaNegocio =
@@ -30,15 +38,19 @@ class ReservasHoyDetailedCard extends StatelessWidget {
       0,
     );
     final end = start.add(const Duration(hours: 24));
+    _stream = FirebaseFirestore.instance
+        .collection("places")
+        .doc(widget.placeId)
+        .collection("reservas")
+        .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('fecha', isLessThan: Timestamp.fromDate(end))
+        .snapshots();
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection("places")
-          .doc(placeId)
-          .collection("reservas")
-          .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-          .where('fecha', isLessThan: Timestamp.fromDate(end))
-          .snapshots(),
+      stream: _stream,
       builder: (context, snap) {
         int pendientes = 0;
         int confirmadas = 0;
@@ -62,7 +74,7 @@ class ReservasHoyDetailedCard extends StatelessWidget {
         }
 
         Widget content = Container(
-          height: isDesktop ? 140 : null,
+          height: widget.isDesktop ? 140 : null,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: const Color(0xFF1E1E1E),
@@ -72,7 +84,7 @@ class ReservasHoyDetailedCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment:
-                isDesktop ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
+                widget.isDesktop ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
             children: [
               Row(
                 children: [
@@ -95,8 +107,8 @@ class ReservasHoyDetailedCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (!isDesktop) const SizedBox(height: 10),
-              if (isDesktop)
+              if (!widget.isDesktop) const SizedBox(height: 10),
+              if (widget.isDesktop)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -146,14 +158,14 @@ class ReservasHoyDetailedCard extends StatelessWidget {
 
         return InkWell(
           onTap: () {
-            if (onNavigateToTab != null) {
-              onNavigateToTab!('Reservas');
+            if (widget.onNavigateToTab != null) {
+              widget.onNavigateToTab!('Reservas');
             } else {
               // Fallback: navegación tradicional si no hay callback
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ReservasMobile(placeId: placeId),
+                  builder: (_) => ReservasMobile(placeId: widget.placeId),
                 ),
               );
             }

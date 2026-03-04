@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 /// - Verde: Sin comandas (COCINA AL DÍA)
 /// - Naranja: 1-5 comandas pendientes
 /// - Rojo: Más de 5 comandas pendientes
-class KitchenStatusBar extends StatelessWidget {
+class KitchenStatusBar extends StatefulWidget {
   final String placeId;
 
   const KitchenStatusBar({
@@ -16,14 +16,27 @@ class KitchenStatusBar extends StatelessWidget {
   });
 
   @override
+  State<KitchenStatusBar> createState() => _KitchenStatusBarState();
+}
+
+class _KitchenStatusBarState extends State<KitchenStatusBar> {
+  late final Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = FirebaseFirestore.instance
+        .collection("places")
+        .doc(widget.placeId)
+        .collection("orders")
+        .where('estado', whereIn: ['en_preparacion', 'pendiente'])
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection("places")
-          .doc(placeId)
-          .collection("orders")
-          .where('estado', whereIn: ['en_preparacion', 'pendiente']) // Filtro consistente
-          .snapshots(),
+      stream: _stream,
       builder: (c, s) {
         final count = s.data?.docs.length ?? 0;
         Color badgeColor = count > 5 ? Colors.redAccent : (count > 0 ? Colors.orangeAccent : Colors.green);

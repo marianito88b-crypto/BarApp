@@ -84,8 +84,218 @@ exports.sendChatNotification = functions.firestore
       await admin.messaging().send(message);
       console.log("✅ Notificación de chat enviada.");
     } catch (error) {
-      console.error("❌ Error en FCM:", error);
+      if (error.code === "messaging/invalid-registration-token" ||
+          error.code === "messaging/registration-token-not-registered") {
+        await db.collection("usuarios").doc(receiverId).update({
+          fcmToken: admin.firestore.FieldValue.delete(),
+          fcmTokenInvalidAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log("⚠️ FCM token inválido removido para usuario", receiverId);
+      } else {
+        console.error("❌ Error en FCM:", error);
+      }
     }
+  });
+
+// ==================================================================
+// 1b. NOTIFICACIÓN PUSH AL PREMIAR CLIENTE (Cupón de regalo)
+// ==================================================================
+// Dispara cuando se crea un cupón en mis_cupones (users o usuarios)
+// Solo para cupones de premio (con venueId), no BarPoints
+exports.sendGiftCouponNotification = functions.firestore
+  .document("{col}/{userId}/mis_cupones/{cuponId}")
+  .onCreate(async (snapshot, context) => {
+    const data = snapshot.data();
+    if (data.origenBarpoints === true) return null;
+
+    const venueId = data.venueId || data.placeId;
+    const venueName = data.venueName || data.placeName || "Un local";
+    const descuento = data.descuentoPorcentaje ?? 10;
+
+    if (!venueId || venueId === "") return null;
+
+    const userId = context.params.userId;
+    const col = context.params.col;
+
+    let userDoc = await db.collection(col).doc(userId).get();
+    if (!userDoc.exists && col === "users") {
+      userDoc = await db.collection("usuarios").doc(userId).get();
+    } else if (!userDoc.exists && col === "usuarios") {
+      userDoc = await db.collection("users").doc(userId).get();
+    }
+
+    if (!userDoc.exists) return null;
+
+    const fcmToken = userDoc.data()?.fcmToken;
+    if (!fcmToken) return null;
+
+    const title = `¡${venueName} te ha premiado! 🎁`;
+    const body = `Recibiste un ${Math.round(descuento)}% de descuento para tu próxima compra por ser un cliente destacado. ¡Aprovéchalo antes de que venza!`;
+
+    const message = {
+      token: fcmToken,
+      notification: { title, body },
+      data: {
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
+        screen: "my_gifts",
+        type: "gift_coupon",
+        placeId: venueId,
+        venueName,
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "high_importance_channel",
+          sound: "default",
+        },
+      },
+      apns: {
+        payload: {
+          aps: { sound: "default", badge: 1 },
+        },
+      },
+    };
+
+    try {
+      await admin.messaging().send(message);
+      console.log("✅ Notificación de cupón de regalo enviada a", userId);
+    } catch (error) {
+      if (error.code === "messaging/invalid-registration-token" ||
+          error.code === "messaging/registration-token-not-registered") {
+        await db.collection(col).doc(userId).update({
+          fcmToken: admin.firestore.FieldValue.delete(),
+          fcmTokenInvalidAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log("⚠️ FCM token inválido removido para usuario", userId);
+      } else {
+        console.error("❌ Error FCM cupón regalo:", error);
+      }
+    }
+    return null;
+  });
+
+// ==================================================================
+// 1c. NOTIFICACIÓN REACCIÓN A POST (Muro)
+// ==================================================================
+// Dispara cuando se actualiza un post en comunidad y hay nueva reacción
+function getAllReactionUserIds(reaccionesUsuarios) {
+  if (!reaccionesUsuarios || typeof reaccionesUsuarios !== "object") return new Set();
+  const uids = new Set();
+  for (const list of Object.values(reaccionesUsuarios)) {
+    if (Array.isArray(list)) list.forEach((uid) => uids.add(uid));
+    else if (list && typeof list === "object") Object.values(list).forEach((uid) => uids.add(uid));
+  }
+  return uids;
+}
+
+exports.notifyPostReaction = functions.firestore
+  .document("comunidad/{postId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    const oldUids = getAllReactionUserIds(before.reaccionesUsuarios);
+    const newUids = getAllReactionUserIds(after.reaccionesUsuarios);
+
+    const addedUids = [...newUids].filter((uid) => !oldUids.has(uid));
+    if (addedUids.length === 0) return null;
+
+    const authorId = after.authorId || "";
+    const reactorId = addedUids[0];
+    if (!authorId || authorId === reactorId) return null;
+
+    let authorDoc = await db.collection("usuarios").doc(authorId).get();
+    if (!authorDoc.exists) authorDoc = await db.collection("users").doc(authorId).get();
+    if (!authorDoc.exists) return null;
+
+    const fcmToken = authorDoc.data()?.fcmToken;
+    if (!fcmToken) return null;
+
+    let reactorDoc = await db.collection("usuarios").doc(reactorId).get();
+    if (!reactorDoc.exists) reactorDoc = await db.collection("users").doc(reactorId).get();
+    const reactorName = reactorDoc.exists ? (reactorDoc.data()?.displayName || "Alguien") : "Alguien";
+
+    const title = `¡A ${reactorName} le gustó tu post! ❤️`;
+
+    const message = {
+      token: fcmToken,
+      notification: { title, body: "Mirá quién reaccionó en el muro" },
+      data: {
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
+        screen: "community_wall",
+        type: "post_reaction",
+        postId: context.params.postId,
+      },
+      android: { priority: "high", notification: { channelId: "high_importance_channel", sound: "default" } },
+      apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    };
+
+    try {
+      await admin.messaging().send(message);
+      console.log("✅ Notificación reacción post enviada a", authorId);
+    } catch (error) {
+      if (error.code === "messaging/invalid-registration-token" || error.code === "messaging/registration-token-not-registered") {
+        await (authorDoc.ref).update({ fcmToken: admin.firestore.FieldValue.delete() });
+      }
+    }
+    return null;
+  });
+
+// ==================================================================
+// 1d. NOTIFICACIÓN REACCIÓN A HISTORIA
+// ==================================================================
+exports.notifyStoryReaction = functions.firestore
+  .document("stories/{storyId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    const oldUsers = before.reactionsUsers || {};
+    const newUsers = after.reactionsUsers || {};
+    const oldUids = new Set(Object.keys(oldUsers));
+    const newUids = new Set(Object.keys(newUsers));
+    const addedUids = [...newUids].filter((uid) => !oldUids.has(uid));
+    if (addedUids.length === 0) return null;
+
+    const authorId = after.authorId || "";
+    const reactorId = addedUids[0];
+    if (!authorId || authorId === reactorId) return null;
+
+    let authorDoc = await db.collection("usuarios").doc(authorId).get();
+    if (!authorDoc.exists) authorDoc = await db.collection("users").doc(authorId).get();
+    if (!authorDoc.exists) return null;
+
+    const fcmToken = authorDoc.data()?.fcmToken;
+    if (!fcmToken) return null;
+
+    let reactorDoc = await db.collection("usuarios").doc(reactorId).get();
+    if (!reactorDoc.exists) reactorDoc = await db.collection("users").doc(reactorId).get();
+    const reactorName = reactorDoc.exists ? (reactorDoc.data()?.displayName || "Alguien") : "Alguien";
+
+    const title = `¡${reactorName} reaccionó a tu historia! 🔥`;
+
+    const message = {
+      token: fcmToken,
+      notification: { title, body: "Mirá la reacción" },
+      data: {
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
+        screen: "story_viewer",
+        type: "story_reaction",
+        storyId: context.params.storyId,
+      },
+      android: { priority: "high", notification: { channelId: "high_importance_channel", sound: "default" } },
+      apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    };
+
+    try {
+      await admin.messaging().send(message);
+      console.log("✅ Notificación reacción historia enviada a", authorId);
+    } catch (error) {
+      if (error.code === "messaging/invalid-registration-token" || error.code === "messaging/registration-token-not-registered") {
+        await (authorDoc.ref).update({ fcmToken: admin.firestore.FieldValue.delete() });
+      }
+    }
+    return null;
   });
 
 // ==================================================================
@@ -415,6 +625,109 @@ exports.sendEventNotification = functions.firestore
       periodStart: isNew ? now : periodStart, updatedAt: now
     }, { merge: true });
 
+    return null;
+  });
+
+// ==================================================================
+// 7b. ACREDITACIÓN DE BARPOINTS AL ENTREGAR PEDIDO (SERVIDOR - MÁXIMA SEGURIDAD)
+// ==================================================================
+// Dispara cuando un pedido pasa a estado 'entregado'. Usa Admin SDK para:
+// - Sumar barPoints al usuario de forma atómica
+// - Marcar puntosAcreditados: true (idempotencia)
+// - Crear entrada en historial_puntos
+// Los usuarios NO pueden modificar barPoints desde el cliente (reglas Firestore).
+const MAX_BAR_POINTS = 500;
+
+function roundMoneda(val) {
+  return Math.round(val * 100) / 100;
+}
+
+exports.onOrderDelivered = functions.firestore
+  .document("places/{placeId}/orders/{orderId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    // Solo actuar cuando el estado pasa a 'entregado'
+    if (after.estado !== "entregado" || before.estado === "entregado") {
+      return null;
+    }
+
+    const puntosAcreditados = after.puntosAcreditados === true;
+    if (puntosAcreditados) {
+      console.log(`⏩ Pedido ${context.params.orderId} ya tenía puntos acreditados. Idempotente.`);
+      return null;
+    }
+
+    const puntosEstimados = Math.floor(Number(after.puntosEstimados) || 0);
+    const userId = after.userId;
+    const placeId = context.params.placeId;
+    const orderId = context.params.orderId;
+
+    if (!userId || typeof userId !== "string" || userId.trim() === "" || puntosEstimados <= 0) {
+      return null;
+    }
+
+    try {
+      await db.runTransaction(async (tx) => {
+        const orderRef = change.after.ref;
+
+        // Releer pedido dentro de la transacción (verificación atómica)
+        const orderSnap = await tx.get(orderRef);
+        const orderData = orderSnap.data();
+        if (!orderSnap.exists || orderData.puntosAcreditados === true) {
+          throw new Error("Pedido ya procesado o no existe");
+        }
+
+        // Resolver usuario en usuarios o users
+        let userRef = db.collection("usuarios").doc(userId);
+        let userSnap = await tx.get(userRef);
+        if (!userSnap.exists) {
+          userRef = db.collection("users").doc(userId);
+          userSnap = await tx.get(userRef);
+        }
+        if (!userSnap.exists) {
+          throw new Error("Usuario no encontrado");
+        }
+
+        const puntosActuales = Math.floor(Number(userSnap.data().barPoints) || 0);
+        const nuevosPuntos = Math.min(puntosActuales + puntosEstimados, MAX_BAR_POINTS);
+        const puntosFinales = Math.round(roundMoneda(nuevosPuntos));
+
+        // Nombre del lugar
+        let placeNombre = "Local";
+        try {
+          const placeSnap = await tx.get(db.doc(`places/${placeId}`));
+          if (placeSnap.exists) {
+            placeNombre = placeSnap.data().nombre || "Local";
+          }
+        } catch (_) {}
+
+        const concepto = `Compra en ${placeNombre}`;
+
+        // 1. Actualizar barPoints del usuario (Admin SDK, bypassa reglas)
+        tx.update(userRef, { barPoints: puntosFinales });
+
+        // 2. Marcar pedido como puntos acreditados
+        tx.update(orderRef, {
+          puntosAcreditados: true,
+          puntosAcreditadosAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // 3. Crear entrada en historial_puntos
+        tx.set(userRef.collection("historial_puntos").doc(), {
+          concepto,
+          monto: puntosEstimados,
+          fecha: admin.firestore.FieldValue.serverTimestamp(),
+          orderId,
+          placeId,
+        });
+      });
+
+      console.log(`✅ BarPoints acreditados: +${puntosEstimados} al usuario ${userId} (pedido ${orderId})`);
+    } catch (error) {
+      console.error("❌ Error acreditando BarPoints:", error);
+    }
     return null;
   });
 

@@ -12,6 +12,7 @@ class VentasExternasService {
     required String canal,
     String? canalCustom,
     String? nota,
+    String? registradoPor,
   }) async {
     final String canalReal = (canal == 'Otro') ? (canalCustom ?? 'Otro') : canal;
     final String metodoPrincipal = _determinarMetodoPrincipal(pagos);
@@ -71,10 +72,11 @@ class VentasExternasService {
       // Nota opcional para ventas rápidas
       if (nota != null && nota.isNotEmpty) 'nota': nota,
 
-      'registradoPor': 'Cajero/Dueño',
+      'registradoPor': registradoPor ?? 'Cajero/Dueño',
     });
 
     // 3. Descuento de Stock (Solo si son productos reales)
+    // Pre-validación: verificar que hay stock suficiente antes del batch
     for (var item in items) {
       if (item['id'] != null && item['id'] != 'GENERICO') {
         final prodRef = FirebaseFirestore.instance
@@ -83,9 +85,21 @@ class VentasExternasService {
             .collection('menu')
             .doc(item['id']);
         
-        // Usamos decremento atómico
+        final prodSnap = await prodRef.get();
+        final prodData = prodSnap.data();
+        if (prodData != null && prodData.containsKey('stock')) {
+          final stockActual = (prodData['stock'] as num?)?.toInt() ?? 0;
+          final cantidad = (item['cantidad'] as num?)?.toInt() ?? 1;
+          if (stockActual < cantidad) {
+            throw Exception(
+              'Stock insuficiente para "${item['nombre']}": disponible $stockActual, solicitado $cantidad'
+            );
+          }
+        }
+
+        // Decremento atómico (ya validado que no quedará negativo)
         batch.update(prodRef, {
-          'stock': FieldValue.increment(-item['cantidad'])
+          'stock': FieldValue.increment(-(item['cantidad'] as num))
         });
       }
     }

@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:barapp/services/barpoints_service.dart';
+import 'package:barapp/services/notification_service.dart';
 import 'package:barapp/ui/user/bar_points_detail_screen.dart';
 
 /// Modal para "Mis Regalos": muestra código para copiar si tiene canje activo,
 /// o CTA para canjear BarPoints si no tiene.
-class MyGiftsModal extends StatelessWidget {
+class MyGiftsModal extends StatefulWidget {
   final String userId;
 
   const MyGiftsModal({super.key, required this.userId});
 
   static void show(BuildContext context, String userId) {
+    NotificationService.clearBadge();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -21,10 +23,23 @@ class MyGiftsModal extends StatelessWidget {
     );
   }
 
+  @override
+  State<MyGiftsModal> createState() => _MyGiftsModalState();
+}
+
+class _MyGiftsModalState extends State<MyGiftsModal> {
+  late final Future<String> _collectionFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _collectionFuture = _resolveCollection();
+  }
+
   Future<String> _resolveCollection() async {
     final snap = await FirebaseFirestore.instance
         .collection('usuarios')
-        .doc(userId)
+        .doc(widget.userId)
         .get();
     return snap.exists ? 'usuarios' : 'users';
   }
@@ -116,7 +131,7 @@ class MyGiftsModal extends StatelessWidget {
             const Divider(height: 1, color: Colors.white10),
             Flexible(
               child: FutureBuilder<String>(
-                future: _resolveCollection(),
+                future: _collectionFuture,
                 builder: (context, colSnap) {
                   if (!colSnap.hasData) {
                     return const Padding(
@@ -129,7 +144,7 @@ class MyGiftsModal extends StatelessWidget {
                   final collection = colSnap.data!;
                   final userRef = FirebaseFirestore.instance
                       .collection(collection)
-                      .doc(userId);
+                      .doc(widget.userId);
                   return StreamBuilder<QuerySnapshot>(
                     stream: userRef
                         .collection('mis_cupones')
@@ -155,14 +170,14 @@ class MyGiftsModal extends StatelessWidget {
 
                       if (cupones.isEmpty) {
                         return _EmptyGiftsState(
-                          userId: userId,
+                          userId: widget.userId,
                           onCanjearTap: () {
                             Navigator.pop(context);
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>
-                                    BarPointsDetailScreen(userId: userId),
+                                    BarPointsDetailScreen(userId: widget.userId),
                               ),
                             );
                           },
@@ -197,9 +212,20 @@ class MyGiftsModal extends StatelessWidget {
     final descuento =
         (data['descuentoPorcentaje'] as num?)?.toDouble() ?? 10.0;
     final esBarpoints = data['origenBarpoints'] == true;
+    final venueName =
+        data['venueName'] as String? ?? data['placeName'] as String? ?? '';
     final fechaVenc =
         (data['fechaVencimiento'] as Timestamp?)?.toDate();
     final validoHasta = (data['validoHasta'] as Timestamp?)?.toDate();
+
+    final String mensajePrincipal = esBarpoints
+        ? descripcion
+        : (venueName.isNotEmpty
+            ? '¡$venueName te premia por ser un cliente destacado!'
+            : descripcion);
+    final String subtituloEmisor = !esBarpoints && venueName.isNotEmpty
+        ? 'Regalo de: $venueName'
+        : '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -237,8 +263,21 @@ class MyGiftsModal extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (subtituloEmisor.isNotEmpty)
+                      Text(
+                        subtituloEmisor,
+                        style: TextStyle(
+                          color: (esBarpoints
+                                  ? Colors.greenAccent
+                                  : Colors.purpleAccent)
+                              .withValues(alpha: 0.9),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                        ),
+                      ),
+                    if (subtituloEmisor.isNotEmpty) const SizedBox(height: 2),
                     Text(
-                      descripcion,
+                      mensajePrincipal,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -363,17 +402,41 @@ class MyGiftsModal extends StatelessWidget {
                 ),
               ),
             )
-          else if (fechaVenc != null || validoHasta != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                "Válido hasta: ${DateFormat('dd/MM/yy').format((fechaVenc ?? validoHasta)!)}",
-                style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 11,
+          else ...[
+            if (venueName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.store_rounded,
+                      size: 14,
+                      color: Colors.purpleAccent.withValues(alpha: 0.8),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Válido exclusivamente en este local",
+                      style: TextStyle(
+                        color: Colors.purpleAccent.withValues(alpha: 0.9),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+            if (fechaVenc != null || validoHasta != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  "Válido hasta: ${DateFormat('dd/MM/yy').format((fechaVenc ?? validoHasta)!)}",
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );

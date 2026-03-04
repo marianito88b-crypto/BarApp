@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Widget que muestra un indicador de estrellas del cliente
 /// 
 /// Busca la reputación del cliente en su perfil y muestra las estrellas promedio
-class ClientStarsIndicator extends StatelessWidget {
+class ClientStarsIndicator extends StatefulWidget {
   final String userId;
 
   const ClientStarsIndicator({
@@ -13,9 +13,22 @@ class ClientStarsIndicator extends StatelessWidget {
   });
 
   @override
+  State<ClientStarsIndicator> createState() => _ClientStarsIndicatorState();
+}
+
+class _ClientStarsIndicatorState extends State<ClientStarsIndicator> {
+  late final Future<DocumentSnapshot> _ratingFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _ratingFuture = _getUserRating();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<DocumentSnapshot>(
-      future: _getUserRating(),
+      future: _ratingFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return const SizedBox.shrink();
@@ -57,14 +70,14 @@ class ClientStarsIndicator extends StatelessWidget {
     // Intentar primero en 'users'
     var doc = await FirebaseFirestore.instance
         .collection('users')
-        .doc(userId)
+        .doc(widget.userId)
         .get();
 
     if (!doc.exists) {
       // Si no existe, intentar en 'usuarios'
       doc = await FirebaseFirestore.instance
           .collection('usuarios')
-          .doc(userId)
+          .doc(widget.userId)
           .get();
     }
 

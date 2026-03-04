@@ -19,15 +19,28 @@ class ClientMenuScreen extends StatefulWidget {
 
 class _ClientMenuScreenState extends State<ClientMenuScreen>
     with ClientMenuLogicMixin {
+  late final Stream<DocumentSnapshot> _placeStream;
+  late final Stream<QuerySnapshot> _menuStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _placeStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .snapshots();
+    _menuStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .collection('menu')
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
     // 1. PRIMERO VERIFICAMOS EL ESTADO DEL LOCAL (Apertura/Cierre)
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('places')
-          .doc(widget.placeId)
-          .snapshots(),
+      stream: _placeStream,
       builder: (context, placeSnapshot) {
         // Pantalla de carga mientras conecta
         if (!placeSnapshot.hasData) {
@@ -49,11 +62,7 @@ class _ClientMenuScreenState extends State<ClientMenuScreen>
 
         // 2. SI ESTÁ ABIERTO, CARGAMOS EL MENÚ
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('places')
-              .doc(widget.placeId)
-              .collection('menu')
-              .snapshots(),
+          stream: _menuStream,
           builder: (context, menuSnapshot) {
             // Pantalla de carga mientras conecta
             if (!menuSnapshot.hasData) {

@@ -1,17 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:barapp/ui/widgets/user_avatar.dart';
 
 /// Botón para agregar una nueva historia
 /// 
 /// Muestra el avatar del usuario con un ícono "+" y el texto "Subir historia"
-class AddStoryButton extends StatelessWidget {
+class AddStoryButton extends StatefulWidget {
   final VoidCallback onTap;
 
   const AddStoryButton({
     super.key,
     required this.onTap,
   });
+
+  @override
+  State<AddStoryButton> createState() => _AddStoryButtonState();
+}
+
+class _AddStoryButtonState extends State<AddStoryButton> {
+  Stream<DocumentSnapshot>? _userStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _userStream = FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(uid)
+          .snapshots();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,16 +49,13 @@ class AddStoryButton extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
-            onTap: onTap,
+            onTap: widget.onTap,
             child: Stack(
               clipBehavior: Clip.none,
               children: [
                 if (uid != null)
                   StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('usuarios')
-                        .doc(uid)
-                        .snapshots(),
+                    stream: _userStream,
                     builder: (context, snapshot) {
                       String? photoUrl;
 
@@ -58,14 +75,7 @@ class AddStoryButton extends StatelessWidget {
                       // Fallback a Auth
                       photoUrl ??= user?.photoURL;
 
-                      final hasPhoto = photoUrl != null && photoUrl.isNotEmpty;
-
-                      return CircleAvatar(
-                        radius: 26,
-                        backgroundColor: const Color(0xFF1A1A1A),
-                        backgroundImage: hasPhoto ? NetworkImage(photoUrl) : null,
-                        child: !hasPhoto ? Text(initials) : null,
-                      );
+                      return UserAvatar(imageUrl: photoUrl, radius: 26);
                     },
                   )
                 else

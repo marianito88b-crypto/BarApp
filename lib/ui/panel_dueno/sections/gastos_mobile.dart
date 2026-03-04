@@ -56,6 +56,7 @@ class _GastosMobileState extends State<GastosMobile>
         children: [_buildGastosView(), _buildProveedoresView()],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: "fab_gastos_mobile",
         backgroundColor: Colors.orangeAccent,
         child: const Icon(Icons.add, color: Colors.black),
         onPressed: () {

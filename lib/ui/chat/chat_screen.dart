@@ -25,12 +25,15 @@ class _ChatScreenState extends State<ChatScreen> {
   // NUEVAS VARIABLES PARA RESPUESTAS
   Map<String, dynamic>? _replyingTo;
 
+  late final Stream<QuerySnapshot> _messagesStream;
+
   @override
   void initState() {
     super.initState();
     final currentId = _auth.currentUser!.uid;
     final ids = [currentId, widget.otherUserId]..sort();
     _chatId = 'chat_${ids[0]}_${ids[1]}';
+    _messagesStream = FirebaseFirestore.instance.collection('chats').doc(_chatId).collection('mensajes').orderBy('timestamp', descending: true).snapshots();
     _cargarFotoDelOtro();
   }
 
@@ -167,7 +170,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('chats').doc(_chatId).collection('mensajes').orderBy('timestamp', descending: true).snapshots(),
+              stream: _messagesStream,
               builder: (ctx, snapshot) {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                 final mensajes = snapshot.data!.docs;

@@ -72,36 +72,67 @@ mixin ConfigLogicMixin<T extends StatefulWidget> on State<T> {
       _dataLoaded = true;
     } else {
       // Actualizar valores de doble turno en cada rebuild si cambian en Firestore
-      tieneDobleTurno = data['tieneDobleTurno'] ?? false;
-      horarioApertura2 = data['horarioApertura2'] ?? '';
-      horarioCierre2 = data['horarioCierre2'] ?? '';
+      // Usamos addPostFrameCallback para evitar setState durante build
+      final nuevoDoble = data['tieneDobleTurno'] ?? false;
+      final nuevoAp2 = data['horarioApertura2'] ?? '';
+      final nuevoCi2 = data['horarioCierre2'] ?? '';
+      if (nuevoDoble != tieneDobleTurno ||
+          nuevoAp2 != horarioApertura2 ||
+          nuevoCi2 != horarioCierre2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              tieneDobleTurno = nuevoDoble;
+              horarioApertura2 = nuevoAp2;
+              horarioCierre2 = nuevoCi2;
+            });
+          }
+        });
+      }
     }
   }
 
   /// Actualiza datos en Firestore en tiempo real
   Future<void> updateRealTime(Map<String, dynamic> data) async {
-    await FirebaseFirestore.instance
-        .collection("places")
-        .doc(placeId)
-        .update(data);
+    try {
+      await FirebaseFirestore.instance
+          .collection("places")
+          .doc(placeId)
+          .update(data);
+    } catch (e) {
+      debugPrint('❌ Error actualizando config: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al guardar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      rethrow;
+    }
   }
 
   /// Guarda los datos generales del negocio
   Future<void> guardarDatosGenerales() async {
-    final nombre = nombreController.text.trim();
-    await updateRealTime({
-      'nombre': nombre,
-      'name': nombre, // 👈 SAFETY CHECK: Guardamos ambos
-      'descripcion': descripcionController.text.trim(),
-      'direccion': direccionController.text.trim(),
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Info general actualizada"),
-          backgroundColor: Colors.green,
-        ),
-      );
+    try {
+      final nombre = nombreController.text.trim();
+      await updateRealTime({
+        'nombre': nombre,
+        'name': nombre, // 👈 SAFETY CHECK: Guardamos ambos
+        'descripcion': descripcionController.text.trim(),
+        'direccion': direccionController.text.trim(),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Info general actualizada"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (_) {
+      // updateRealTime ya muestra el error
     }
   }
 
@@ -157,35 +188,43 @@ mixin ConfigLogicMixin<T extends StatefulWidget> on State<T> {
 
   /// Guarda los datos bancarios para transferencias
   Future<void> guardarDatosBancarios() async {
-    await updateRealTime({
-      'cbu': cbuController.text.trim(),
-      'alias': aliasController.text.trim(),
-      'banco': bancoController.text.trim(),
-      'titularCuenta': titularController.text.trim(),
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Datos bancarios actualizados"),
-          backgroundColor: Colors.blueAccent,
-        ),
-      );
+    try {
+      await updateRealTime({
+        'cbu': cbuController.text.trim(),
+        'alias': aliasController.text.trim(),
+        'banco': bancoController.text.trim(),
+        'titularCuenta': titularController.text.trim(),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Datos bancarios actualizados"),
+            backgroundColor: Colors.blueAccent,
+          ),
+        );
+      }
+    } catch (_) {
+      // updateRealTime ya muestra el error
     }
   }
 
   /// Guarda los costos de envío
   Future<void> guardarCostosEnvio() async {
-    await updateRealTime({
-      'envioCostoBase': double.tryParse(envioBaseController.text) ?? 2000,
-      'envioCostoKmExtra': double.tryParse(envioKmExtraController.text) ?? 500,
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Tarifas de envío actualizadas"),
-          backgroundColor: Colors.purpleAccent,
-        ),
-      );
+    try {
+      await updateRealTime({
+        'envioCostoBase': double.tryParse(envioBaseController.text) ?? 2000,
+        'envioCostoKmExtra': double.tryParse(envioKmExtraController.text) ?? 500,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Tarifas de envío actualizadas"),
+            backgroundColor: Colors.purpleAccent,
+          ),
+        );
+      }
+    } catch (_) {
+      // updateRealTime ya muestra el error
     }
   }
 
@@ -323,24 +362,27 @@ mixin ConfigLogicMixin<T extends StatefulWidget> on State<T> {
   /// Si se desactiva el doble turno, opcionalmente se pueden limpiar los campos del segundo turno
   /// pasando [limpiarHorarios] como true.
   Future<void> actualizarDobleTurno(bool valor, {bool limpiarHorarios = false}) async {
-    final Map<String, dynamic> updateData = {'tieneDobleTurno': valor};
-    
-    // Si se desactiva y se solicita limpiar, eliminar los horarios del segundo turno
-    if (!valor && limpiarHorarios) {
-      updateData['horarioApertura2'] = FieldValue.delete();
-      updateData['horarioCierre2'] = FieldValue.delete();
-    }
-    
-    await updateRealTime(updateData);
-    
-    if (mounted) {
-      setState(() {
-        tieneDobleTurno = valor;
-        if (!valor && limpiarHorarios) {
-          horarioApertura2 = '';
-          horarioCierre2 = '';
-        }
-      });
+    try {
+      final Map<String, dynamic> updateData = {'tieneDobleTurno': valor};
+      
+      if (!valor && limpiarHorarios) {
+        updateData['horarioApertura2'] = FieldValue.delete();
+        updateData['horarioCierre2'] = FieldValue.delete();
+      }
+      
+      await updateRealTime(updateData);
+      
+      if (mounted) {
+        setState(() {
+          tieneDobleTurno = valor;
+          if (!valor && limpiarHorarios) {
+            horarioApertura2 = '';
+            horarioCierre2 = '';
+          }
+        });
+      }
+    } catch (_) {
+      // updateRealTime ya muestra el error
     }
   }
 

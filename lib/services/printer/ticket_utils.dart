@@ -84,9 +84,9 @@ class TicketUtils {
                     child: pw.Row(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('${item['cantidad']}x ', 
+                        pw.Text('${item['cantidad'] ?? 1}x ', 
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                        pw.Expanded(child: pw.Text(item['nombre'], 
+                        pw.Expanded(child: pw.Text(item['nombre']?.toString() ?? '?', 
                           style: pw.TextStyle(fontSize: 14))),
                       ],
                     ),
@@ -151,20 +151,24 @@ class TicketUtils {
               ),
               pw.Divider(borderStyle: pw.BorderStyle.dashed),
               
-              ...items.map((item) => pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Expanded(
-                      child: pw.Text('${item['cantidad']}x ${item['nombre']}', 
-                        style: const pw.TextStyle(fontSize: 9)),
-                    ),
-                    pw.Text('\$${(item['precio'] * item['cantidad']).toStringAsFixed(0)}', 
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  ],
-                ),
-              )),
+              ...items.map((item) {
+                final itemPrecio = (item['precio'] as num?)?.toDouble() ?? 0.0;
+                final itemCant = (item['cantidad'] as num?)?.toInt() ?? 1;
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Text('${itemCant}x ${item['nombre'] ?? '?'}', 
+                          style: const pw.TextStyle(fontSize: 9)),
+                      ),
+                      pw.Text('\$${(itemPrecio * itemCant).toStringAsFixed(0)}', 
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    ],
+                  ),
+                );
+              }),
 
               pw.Divider(),
               pw.Row(
@@ -192,10 +196,11 @@ class TicketUtils {
   static Future<Uint8List> generatePdfReserva(Map<String, dynamic> datos) async {
     final pdf = pw.Document();
     
-    // Manejo de fecha seguro
-    final DateTime fechaObj = datos['fechaReserva'] is DateTime 
-        ? datos['fechaReserva'] 
-        : (datos['fechaReserva'] as dynamic).toDate();
+    // Manejo de fecha seguro (guarda contra campo null o ausente)
+    final rawFecha = datos['fechaReserva'];
+    final DateTime fechaObj = rawFecha is DateTime
+        ? rawFecha
+        : (rawFecha != null ? (rawFecha as dynamic).toDate() : DateTime.now());
     
     final fechaStr = DateFormat('dd/MM HH:mm').format(fechaObj);
 
@@ -241,7 +246,7 @@ class TicketUtils {
                 ],
               ),
 
-              if (datos['total'] > 0)
+              if ((datos['total'] as num? ?? 0) > 0)
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
@@ -278,12 +283,31 @@ class TicketUtils {
     final items = (datos['items'] as List<dynamic>?) ?? [];
     final double totalFinal = (datos['total'] as num?)?.toDouble() ?? 0.0;
     
+    // Número de pedido: orderNumber o últimos 6 caracteres del orderId/docId
+    final rawId = datos['orderNumber'] ?? datos['orderId'] ?? datos['id'];
+    final String orderNum = rawId != null
+        ? (rawId.toString().length > 6
+            ? rawId.toString().substring(rawId.toString().length - 6)
+            : rawId.toString())
+        : 'N/A';
+    
+    // Teléfono del cliente (evitar "null" literal)
+    final telRaw = datos['telefono'] ?? datos['clienteTelefono'];
+    final String telefonoCliente = (telRaw != null &&
+            telRaw.toString().trim().isNotEmpty &&
+            telRaw.toString().toLowerCase() != 'null')
+        ? telRaw.toString()
+        : 'S/D';
+    
     // 🔥 EXTRAEMOS EL COSTO DE ENVÍO Y DESCUENTO
     final double costoEnvio = (datos['costoEnvio'] as num? ?? 0.0).toDouble();
-    final double descuentoAplicado = (datos['descuentoAplicado'] as num?)?.toDouble() ?? 0.0;
+    final double descuentoAplicado = (datos['descuentoAplicado'] as num?)?.toDouble() ??
+        (datos['descuento'] as num?)?.toDouble() ??
+        (datos['montoDescuento'] as num?)?.toDouble() ??
+        0.0;
     final String? codigoDescuento = datos['codigoDescuento'] as String?;
     final bool origenBarpoints = datos['origenBarpoints'] == true;
-    final double? descuentoPorcentaje = (datos['descuentoPorcentaje'] as num?)?.toDouble();
+    // descuentoPorcentaje disponible en datos si se necesita en el futuro
     // Subtotal = total final + descuento - envío (para mostrar correctamente)
     final double subtotalComida = totalFinal + descuentoAplicado - costoEnvio;
 
@@ -316,6 +340,7 @@ class TicketUtils {
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
               pw.Text('PEDIDO BARAPP', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.Text('Pedido #$orderNum', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               pw.Text(metodo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
               pw.Text('Fecha: $fechaStr', style: const pw.TextStyle(fontSize: 9)),
               pw.Divider(),
@@ -326,9 +351,9 @@ class TicketUtils {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('CLIENTE: ${datos['cliente']?.toString().toUpperCase()}', 
+                    pw.Text('CLIENTE: ${datos['cliente']?.toString().toUpperCase() ?? 'Cliente'}', 
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                    pw.Text('TEL: ${datos['telefono']}', style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text('TEL: $telefonoCliente', style: const pw.TextStyle(fontSize: 10)),
                     if (datos['metodoEntrega'] == 'delivery')
                       pw.Text('DIR: ${datos['direccion']}', 
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
@@ -339,14 +364,18 @@ class TicketUtils {
               pw.Divider(borderStyle: pw.BorderStyle.dashed),
 
               // ITEMS
-              ...items.map((item) => pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Expanded(child: pw.Text('${item['cantidad']}x ${item['nombre']}', style: const pw.TextStyle(fontSize: 9))),
-                  pw.Text('\$${(item['precio'] * item['cantidad']).toStringAsFixed(0)}', 
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                ],
-              )),
+              ...items.map((item) {
+                final itemPrecio = (item['precio'] as num?)?.toDouble() ?? 0.0;
+                final itemCant = (item['cantidad'] as num?)?.toInt() ?? 1;
+                return pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Expanded(child: pw.Text('${itemCant}x ${item['nombre'] ?? '?'}', style: const pw.TextStyle(fontSize: 9))),
+                    pw.Text('\$${(itemPrecio * itemCant).toStringAsFixed(0)}', 
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  ],
+                );
+              }),
 
               pw.Divider(),
 
@@ -359,15 +388,15 @@ class TicketUtils {
                 ],
               ),
               
-              // Descuento por promoción (si existe)
-              if (descuentoAplicado > 0 && codigoDescuento != null)
+              // Descuento BarPoints o cupón (si existe)
+              if (descuentoAplicado > 0)
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      origenBarpoints && descuentoPorcentaje != null
-                          ? 'Descuento BarPoints (${descuentoPorcentaje.toInt()}%):'
-                          : 'Descuento ($codigoDescuento):',
+                      origenBarpoints
+                          ? 'Descuento BarPoints:'
+                          : (codigoDescuento != null ? 'Descuento ($codigoDescuento):' : 'Descuento:'),
                       style: const pw.TextStyle(fontSize: 9, color: PdfColors.green),
                     ),
                     pw.Text('-\$${descuentoAplicado.toStringAsFixed(0)}', 

@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 /// Widget que muestra un diálogo con los datos bancarios para transferencia
 /// 
 /// Permite copiar CBU y Alias al portapapeles con feedback visual.
-class ClientPaymentInfoDialog extends StatelessWidget {
+class ClientPaymentInfoDialog extends StatefulWidget {
   final String placeId;
   final double total;
 
@@ -17,12 +17,25 @@ class ClientPaymentInfoDialog extends StatelessWidget {
   });
 
   @override
+  State<ClientPaymentInfoDialog> createState() => _ClientPaymentInfoDialogState();
+}
+
+class _ClientPaymentInfoDialogState extends State<ClientPaymentInfoDialog> {
+  late final Future<DocumentSnapshot> _placeFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _placeFuture = FirebaseFirestore.instance
+        .collection('places')
+        .doc(widget.placeId)
+        .get();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance
-          .collection('places')
-          .doc(placeId)
-          .get(),
+      future: _placeFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -52,7 +65,7 @@ class ClientPaymentInfoDialog extends StatelessWidget {
                 style: TextStyle(color: Colors.white, fontSize: 18),
               ),
               Text(
-                "Total a transferir: \$${NumberFormat("#,##0", "es_AR").format(total)}",
+                "Total a transferir: \$${NumberFormat("#,##0", "es_AR").format(widget.total)}",
                 style: const TextStyle(
                   color: Colors.greenAccent,
                   fontSize: 14,

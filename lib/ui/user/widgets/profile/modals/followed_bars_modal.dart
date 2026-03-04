@@ -4,7 +4,7 @@ import 'package:barapp/services/follow_service.dart';
 import 'package:barapp/ui/place/place_detail_screen.dart';
 
 /// Modal con la lista completa de bares seguidos
-class FollowedBarsModal extends StatelessWidget {
+class FollowedBarsModal extends StatefulWidget {
   final List<String> followingBars;
 
   const FollowedBarsModal({
@@ -13,16 +13,34 @@ class FollowedBarsModal extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  State<FollowedBarsModal> createState() => _FollowedBarsModalState();
+}
+
+class _FollowedBarsModalState extends State<FollowedBarsModal> {
+  late final List<List<String>> _chunks;
+  late final List<Stream<QuerySnapshot>> _chunkStreams;
+
+  @override
+  void initState() {
+    super.initState();
     // Dividir en chunks de 10 para evitar el límite de whereIn
-    final chunks = <List<String>>[];
-    for (var i = 0; i < followingBars.length; i += 10) {
-      chunks.add(followingBars.sublist(
+    _chunks = <List<String>>[];
+    for (var i = 0; i < widget.followingBars.length; i += 10) {
+      _chunks.add(widget.followingBars.sublist(
         i,
-        i + 10 > followingBars.length ? followingBars.length : i + 10,
+        i + 10 > widget.followingBars.length ? widget.followingBars.length : i + 10,
       ));
     }
+    _chunkStreams = _chunks.map((chunk) {
+      return FirebaseFirestore.instance
+          .collection('places')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .snapshots();
+    }).toList();
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFF1E1E1E),
@@ -47,7 +65,7 @@ class FollowedBarsModal extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Bares Seguidos (${followingBars.length})',
+                    'Bares Seguidos (${widget.followingBars.length})',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -67,14 +85,10 @@ class FollowedBarsModal extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),
-                itemCount: chunks.length,
+                itemCount: _chunks.length,
                 itemBuilder: (context, chunkIndex) {
-                  final chunk = chunks[chunkIndex];
                   return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('places')
-                        .where(FieldPath.documentId, whereIn: chunk)
-                        .snapshots(),
+                    stream: _chunkStreams[chunkIndex],
                     builder: (context, snap) {
                       if (!snap.hasData) {
                         return const Center(
