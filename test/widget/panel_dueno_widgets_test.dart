@@ -16,14 +16,14 @@ Widget _wrap(Widget w) => MaterialApp(
 // ─────────────────────────────────────────────────────────────────────────────
 void main() {
   group('ExternaCartPanel —', () {
-    final List<Map<String, dynamic>> _pedido = [
+    final List<Map<String, dynamic>> pedido = [
       {'nombre': 'Empanada', 'precio': 350.0, 'cantidad': 2},
       {'nombre': 'Coca Cola', 'precio': 500.0, 'cantidad': 1},
     ];
 
     testWidgets('muestra el título del panel', (tester) async {
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () {},
@@ -33,7 +33,7 @@ void main() {
 
     testWidgets('muestra el nombre de cada producto', (tester) async {
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () {},
@@ -44,7 +44,7 @@ void main() {
 
     testWidgets('muestra cantidad × nombre en ListTile', (tester) async {
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () {},
@@ -55,7 +55,7 @@ void main() {
 
     testWidgets('muestra el total formateado', (tester) async {
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () {},
@@ -65,7 +65,7 @@ void main() {
 
     testWidgets('muestra botón CONTINUAR', (tester) async {
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () {},
@@ -87,7 +87,7 @@ void main() {
 
     testWidgets('botón CONTINUAR habilitado cuando hay ítems', (tester) async {
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () {},
@@ -98,7 +98,7 @@ void main() {
 
     testWidgets('icono de restar presente en cada ítem', (tester) async {
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () {},
@@ -110,7 +110,7 @@ void main() {
         (tester) async {
       int? tappedIndex;
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (i) => tappedIndex = i,
         onContinuar: () {},
@@ -122,7 +122,7 @@ void main() {
     testWidgets('tapping CONTINUAR llama onContinuar', (tester) async {
       bool called = false;
       await tester.pumpWidget(_wrap(ExternaCartPanel(
-        pedido: _pedido,
+        pedido: pedido,
         total: 1200,
         onRestarProducto: (_) {},
         onContinuar: () => called = true,

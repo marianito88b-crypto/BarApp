@@ -1,7 +1,7 @@
-/// Funciones puras extraídas del panel de dueños para facilitar la testabilidad.
-///
-/// Todas las funciones de este archivo son deterministas, sin efectos secundarios
-/// y sin dependencias de Firebase ni de Flutter. Pueden testearse con dart:test puro.
+// Funciones puras extraídas del panel de dueños para facilitar la testabilidad.
+//
+// Todas las funciones de este archivo son deterministas, sin efectos secundarios
+// y sin dependencias de Firebase ni de Flutter. Pueden testearse con dart:test puro.
 
 /// Calcula el total esperado en caja a partir de los componentes de la sesión.
 ///

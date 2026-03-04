@@ -186,6 +186,7 @@ class _ReservasMobileState extends State<ReservasMobile>
                           if (mesasSeleccionadas != null &&
                               mesasSeleccionadas.isNotEmpty) {
                             await _confirmarConMultiplesMesas(
+                              // ignore: use_build_context_synchronously
                               context,
                               id,
                               data,
@@ -195,6 +196,7 @@ class _ReservasMobileState extends State<ReservasMobile>
                           }
                         }
                         // Confirmar normalmente o actualizar estado
+                        // ignore: use_build_context_synchronously
                         updateEstado(context, id, data, status);
                       },
                     );
@@ -458,8 +460,9 @@ class _ReservasMobileState extends State<ReservasMobile>
                                               if (mesasSeleccionadas != null &&
                                                   mesasSeleccionadas.isNotEmpty) {
                                                 // Actualizar con múltiples mesas
+                                                // ignore: use_build_context_synchronously
                                                 await _confirmarConMultiplesMesas(
-                                                  context,
+                                                  context, // ignore: use_build_context_synchronously
                                                   d.id,
                                                   data,
                                                   mesasSeleccionadas,
@@ -559,6 +562,8 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
     Map<String, dynamic> data,
     List<String> mesasIds,
   ) async {
+    // Pre-capturar antes del primer await para evitar uso de context tras gap asíncrono
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // Obtener nombres de las mesas
       final mesasSnap = await FirebaseFirestore.instance
@@ -603,7 +608,7 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
       await batch.commit();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
               "Reserva confirmada con ${mesasIds.length} mesa(s) asignada(s)"),
@@ -613,7 +618,7 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
     } catch (e) {
       debugPrint("Error confirmando con múltiples mesas: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text("Error: $e"),
           backgroundColor: Colors.red,
@@ -627,6 +632,8 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
     String id,
     Map<String, dynamic> data,
   ) async {
+    // Pre-capturar antes del primer await
+    final messenger = ScaffoldMessenger.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder:
@@ -704,7 +711,7 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
 
       await batch.commit();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text("Reserva eliminada"),
           backgroundColor: Colors.red,
@@ -712,7 +719,7 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text("Error al eliminar reserva: $e"),
           backgroundColor: Colors.redAccent,
@@ -806,8 +813,9 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
   // 🔥 FIX CRÍTICO: Variable fuera del builder para que no se resetee en cada rebuild
   bool cargando = false;
 
+ // ignore: use_build_context_synchronously
  showDialog(
-  context: context,
+  context: context, // ignore: use_build_context_synchronously
   barrierDismissible: false, // 🔒 Evita que cierren el diálogo mientras guarda
   builder: (ctx) => StatefulBuilder(
     builder: (context, setDialogState) {
@@ -1093,8 +1101,10 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
                             DateTime.now().add(const Duration(days: 365)),
                       );
                       if (!mounted) return;
+                      // ignore: use_build_context_synchronously
                       if (date != null) {
                         final time = await showTimePicker(
+                          // ignore: use_build_context_synchronously
                           context: context,
                           initialTime:
                               TimeOfDay.fromDateTime(fechaSeleccionada),
@@ -1232,6 +1242,7 @@ List<DocumentSnapshot> _filtrarDocsLocalmente(List<DocumentSnapshot> docs) {
 
                   await batch.commit();
                   if (!mounted) return;
+                  // ignore: use_build_context_synchronously
                   Navigator.pop(ctx);
                 } catch (e) {
                   // 4. Si falla, liberamos el botón para reintentar

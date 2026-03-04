@@ -202,6 +202,9 @@ class _VentasExternasProductosScreenState
                   });
                 },
                 onContinuar: () async {
+                  // Pre-capturar antes del gap asíncrono
+                  final navigator = Navigator.of(context);
+                  final messenger = ScaffoldMessenger.of(context);
                   final bool? ventaExitosa = await showModalBottomSheet<bool>(
                     context: context,
                     isScrollControlled: true,
@@ -216,7 +219,7 @@ class _VentasExternasProductosScreenState
                   if (!mounted) return;
                   if (ventaExitosa == true) {
                     // 1️⃣ CERRAR EL CARRITO (Modal A)
-                    Navigator.pop(context);
+                    navigator.pop();
 
                     // 2️⃣ LIMPIAR ESTADO GLOBAL (todo en un solo setState)
                     setState(() {
@@ -225,7 +228,7 @@ class _VentasExternasProductosScreenState
                     });
 
                     // 3️⃣ FEEDBACK VISUAL
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       SnackBar(
                         behavior: SnackBarBehavior.floating,
                         backgroundColor: const Color(0xFF2E7D32),

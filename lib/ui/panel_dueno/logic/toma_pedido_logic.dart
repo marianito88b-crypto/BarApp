@@ -476,7 +476,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
         }
 
         // Mostrar modal de selección
-        if (!context.mounted) return;
+        if (!mounted) return;
         final resultado = await showDialog<Map<String, dynamic>>(
           context: context,
           builder: (ctx) => ModalSeleccionarModoCobro(
@@ -494,7 +494,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
         if (cobroUnificado) {
           mesasACobrar = [mesaId, ...mesasRelacionadas.map((m) => m['id'] as String)];
           // Usar el total unificado para el modal de pago
-          if (!context.mounted) return;
+          if (!mounted) return;
           final Map<String, dynamic>? pagoResultUnif = await showDialog(
             context: context,
             builder: (ctx) => ModalProcesarPago(
@@ -513,7 +513,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
               (pagoResultUnif['descuentoAplicado'] as num?)?.toDouble() ?? 0.0;
           final String? codigoUnif = pagoResultUnif['codigoAplicado'] as String?;
 
-          if (!context.mounted) return;
+          if (!mounted) return;
           await _cobrarCuentasUnificadas(
             mesasACobrar,
             totalFinalUnif,
@@ -526,7 +526,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
       }
 
       // Cobro individual (comportamiento original)
-      if (!context.mounted) return;
+      if (!mounted) return;
       final Map<String, dynamic>? pagoResult = await showDialog(
         context: context,
         builder: (ctx) => ModalProcesarPago(
@@ -545,7 +545,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
           (pagoResult['descuentoAplicado'] as num?)?.toDouble() ?? 0.0;
       final String? codigoDescuento = pagoResult['codigoAplicado'] as String?;
 
-      if (!context.mounted) return;
+      if (!mounted) return;
       await _cobrarCuentaIndividual(
         totalFinal,
         resultadoPagos,
@@ -554,7 +554,7 @@ mixin TomaPedidoLogicMixin<T extends StatefulWidget> on State<T> {
       );
     } catch (e) {
       debugPrint("Error cobrando: $e");
-      if (!context.mounted) return;
+      if (!mounted) return;
       setState(() => setGuardando(false));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

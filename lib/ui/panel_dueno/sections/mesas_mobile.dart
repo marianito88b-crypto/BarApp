@@ -563,6 +563,9 @@ ElevatedButton(
   ),
   onPressed: guardando ? null : () async {
     if (nombreCtrl.text.isEmpty) return;
+    // Pre-capturar ANTES del primer await (guard de linter)
+    final navigator = Navigator.of(ctx);
+    final messenger = ScaffoldMessenger.of(context);
 
     // 🚨 BLOQUEO DE SEGURIDAD CRÍTICO
     // Si el usuario quiere poner "LIBRE" pero el documento de Firebase dice que hay un cliente
@@ -641,12 +644,12 @@ ElevatedButton(
       }
 
       if (!mounted) return;
-      Navigator.pop(ctx);
+      navigator.pop();
 
     } catch (e) {
       setDialogState(() => guardando = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red)
       );
     }

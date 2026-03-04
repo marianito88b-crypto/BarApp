@@ -62,14 +62,13 @@ class _QRGeneratorMobileState extends State<QRGeneratorMobile> {
         filename: 'qr-mi-local.pdf',
       );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al guardar el QR: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al guardar el QR: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -131,15 +130,16 @@ class _QRGeneratorMobileState extends State<QRGeneratorMobile> {
               // --- BOTÓN COPIAR ENLACE ---
               ElevatedButton.icon(
                 onPressed: () async {
+                  // Pre-capturar antes del await
+                  final messenger = ScaffoldMessenger.of(context);
                   await Clipboard.setData(ClipboardData(text: urlMenu));
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("✅ Enlace copiado al portapapeles"),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text("✅ Enlace copiado al portapapeles"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.purpleAccent,
