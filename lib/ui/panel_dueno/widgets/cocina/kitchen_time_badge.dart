@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 /// Widget que muestra el tiempo de creación de una comanda
-/// 
+///
 /// Muestra la hora en formato HH:mm y los minutos transcurridos si pasaron más de 5 minutos.
 /// Cambia de color cuando pasan más de 15 minutos.
-class KitchenTimeBadge extends StatelessWidget {
+///
+/// IMPORTANTE: Es StatefulWidget con Timer para que el contador realmente avance
+/// en pantalla sin depender de que el stream de Firestore emita un nuevo evento.
+class KitchenTimeBadge extends StatefulWidget {
   final DateTime fecha;
 
   const KitchenTimeBadge({
@@ -14,9 +18,31 @@ class KitchenTimeBadge extends StatelessWidget {
   });
 
   @override
+  State<KitchenTimeBadge> createState() => _KitchenTimeBadgeState();
+}
+
+class _KitchenTimeBadgeState extends State<KitchenTimeBadge> {
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresca cada 30 segundos para que el contador sea preciso
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final timeStr = DateFormat("HH:mm").format(fecha);
-    final diff = DateTime.now().difference(fecha).inMinutes;
+    final timeStr = DateFormat("HH:mm").format(widget.fecha);
+    final diff = DateTime.now().difference(widget.fecha).inMinutes;
     Color bgColor = diff > 15 ? Colors.redAccent : Colors.black26;
 
     return Container(

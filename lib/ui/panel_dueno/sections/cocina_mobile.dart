@@ -45,8 +45,7 @@ class _CocinaMobileState extends State<CocinaMobile> with KitchenLogicMixin, Sin
         .doc(widget.placeId)
         .collection("orders")
         .where('estado', whereIn: [
-          'listo', 'preparado', 'listo_para_retirar', 'entregado',
-          'cancelado_por_mozo', 'archivado',
+          'listo', 'preparado', 'listo_para_retirar', 'entregado', 'archivado',
         ])
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
         .orderBy('createdAt', descending: true)

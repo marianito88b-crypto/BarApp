@@ -21,7 +21,7 @@ class AdminEventCard extends StatelessWidget {
     final data = doc.data() as Map<String, dynamic>;
     final isShow = data['type'] == 'show';
     final color = isShow ? Colors.amber : Colors.greenAccent;
-    final date = (data['date'] as Timestamp).toDate();
+    final date = (data['date'] as Timestamp?)?.toDate() ?? DateTime.now();
     final imageUrl = data['imageUrl'];
     final isPast = date.isBefore(DateTime.now());
 

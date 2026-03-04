@@ -177,6 +177,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     // Lógica de subida de imagen
     String? finalImageUrl = _currentImageUrl;
     String? imagePath;
+    final data = _isEditing
+        ? widget.doc!.data() as Map<String, dynamic>
+        : <String, dynamic>{};
     final hasNewImage =
         (kIsWeb && _newImageBytes != null) || (!kIsWeb && _newImageFile != null);
 
@@ -194,16 +197,29 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           await ref.putFile(_newImageFile!);
         }
         finalImageUrl = await ref.getDownloadURL();
+
+        // Borrar la imagen anterior de Storage si estamos editando
+        final oldImagePath = data['imagePath'] as String?;
+        if (_isEditing && oldImagePath != null && oldImagePath.isNotEmpty) {
+          try {
+            await FirebaseStorage.instance.ref(oldImagePath).delete();
+          } catch (_) {
+            // Ignorar: puede que ya no exista el archivo antiguo
+          }
+        }
       } catch (e) {
         debugPrint("Error img: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error al subir la imagen: $e"), backgroundColor: Colors.red),
+          );
+          setState(() => _uploading = false);
+        }
+        return;
       }
     }
 
     // Data final con el tipo de notificación
-    final data = _isEditing
-        ? widget.doc!.data() as Map<String, dynamic>
-        : <String, dynamic>{};
-
     final eventData = {
       'placeId': widget.placeId,
       'title': _titleCtrl.text.trim(),
@@ -234,8 +250,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error al guardar: $e")),
         );
-        setState(() => _uploading = false);
       }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
     }
   }
 
@@ -301,40 +318,45 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
               // IMAGEN
               GestureDetector(
                 onTap: _pickImage,
-                child: Container(
-                  height: 150,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.black38,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24),
-                    image: _getImageProvider() != null
-                        ? DecorationImage(
-                            image: _getImageProvider()!,
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: _getImageProvider() == null
-                      ? const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.add_a_photo,
-                              color: Colors.purpleAccent,
-                              size: 30,
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              "Agregar Imagen (Opcional)",
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        )
-                      : null,
+                child: Builder(
+                  builder: (context) {
+                    final imgProvider = _getImageProvider();
+                    return Container(
+                      height: 150,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white24),
+                        image: imgProvider != null
+                            ? DecorationImage(
+                                image: imgProvider,
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: imgProvider == null
+                          ? const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_a_photo,
+                                  color: Colors.purpleAccent,
+                                  size: 30,
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  "Agregar Imagen (Opcional)",
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                    );
+                  },
                 ),
               ),
 

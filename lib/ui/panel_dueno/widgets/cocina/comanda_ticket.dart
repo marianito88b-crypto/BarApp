@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'kitchen_time_badge.dart';
 
 /// Widget que representa un ticket de comanda en el monitor de cocina
-/// 
+///
 /// Muestra la información de la comanda con:
 /// - ID corto formateado (últimos 4 caracteres)
 /// - Identificador (mesa o cliente)
@@ -11,7 +12,10 @@ import 'kitchen_time_badge.dart';
 /// - Lista de items con cantidades y notas
 /// - Badge de tiempo con color según demora
 /// - Botón de despacho
-class ComandaTicket extends StatelessWidget {
+///
+/// IMPORTANTE: StatefulWidget con Timer para que el color del borde
+/// se actualice en tiempo real sin depender del stream de Firestore.
+class ComandaTicket extends StatefulWidget {
   final DocumentSnapshot doc;
   final String placeId;
 
@@ -22,7 +26,29 @@ class ComandaTicket extends StatelessWidget {
   });
 
   @override
+  State<ComandaTicket> createState() => _ComandaTicketState();
+}
+
+class _ComandaTicketState extends State<ComandaTicket> {
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final doc = widget.doc;
     final data = doc.data() as Map<String, dynamic>;
     final items = List<Map<String, dynamic>>.from(data['items'] ?? []);
     final bool canceladoPorMozo = data['estado'] == 'cancelado_por_mozo';
@@ -270,9 +296,9 @@ class ComandaTicket extends StatelessWidget {
     try {
       await FirebaseFirestore.instance
           .collection("places")
-          .doc(placeId)
+          .doc(widget.placeId)
           .collection("orders")
-          .doc(doc.id)
+          .doc(widget.doc.id)
           .update({
         'estado': 'archivado',
         'archivadoAt': FieldValue.serverTimestamp(),
@@ -310,9 +336,9 @@ class ComandaTicket extends StatelessWidget {
       // Usamos doc.id directamente porque estamos dentro del widget ComandaTicket
       final orderRef = firestore
           .collection("places")
-          .doc(placeId)
+          .doc(widget.placeId)
           .collection("orders")
-          .doc(doc.id); 
+          .doc(widget.doc.id); 
 
       final String metodo = data['metodoEntrega'] ?? data['tipo'] ?? 'mesa';
       String nuevoEstado;
