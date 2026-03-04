@@ -25,7 +25,6 @@ class LiveStatCard extends StatefulWidget {
 
 class _LiveStatCardState extends State<LiveStatCard> {
   Stream<QuerySnapshot>? _mainStream;
-  Stream<QuerySnapshot>? _reservasStream;
 
   @override
   void initState() {
@@ -35,17 +34,6 @@ class _LiveStatCardState extends State<LiveStatCard> {
           .collection("places")
           .doc(widget.placeId)
           .collection("mesas")
-          .snapshots();
-      final now = DateTime.now();
-      final inicioHoy = DateTime(now.year, now.month, now.day);
-      final finHoy = DateTime(now.year, now.month, now.day, 23, 59, 59);
-      _reservasStream = FirebaseFirestore.instance
-          .collection("places")
-          .doc(widget.placeId)
-          .collection("reservas")
-          .where('estado', whereIn: ['confirmada', 'en_curso'])
-          .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(inicioHoy))
-          .where('fecha', isLessThanOrEqualTo: Timestamp.fromDate(finHoy))
           .snapshots();
     } else if (widget.type == 'pedidos_web') {
       _mainStream = FirebaseFirestore.instance
@@ -257,7 +245,6 @@ class _LiveStatCardState extends State<LiveStatCard> {
     int total = 0;
     int ocupadas = 0;
     int libres = 0;
-    int reservadas = 0;
 
     if (snap.hasData) {
       total = snap.data!.docs.length;
@@ -267,101 +254,96 @@ class _LiveStatCardState extends State<LiveStatCard> {
         if (estado == 'libre') {
           libres++;
         } else {
-          ocupadas++;
-          if (estado == 'reservada') reservadas++;
+          ocupadas++; // incluye: ocupada, reservada, cualquier otro estado no-libre
         }
       }
     }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: _reservasStream,
-      builder: (context, reservasSnap) {
-        // Las mesas reservadas también se consideran ocupadas visualmente
-        final int ocupadasConReservas = ocupadas + reservadas;
+    // Las mesas reservadas ya están dentro de ocupadas (mismo loop).
+    // NO sumar reservadas de nuevo — hacerlo causaba doble conteo.
+    final int totalEnUso = ocupadas;
 
-        Widget content = Container(
-          height: widget.isDesktop ? 140 : null,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: widget.isDesktop
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    Widget content = Container(
+      height: widget.isDesktop ? 140 : null,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: widget.isDesktop
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(icon, color: color, size: 20),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            label,
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(icon, color: color, size: 20),
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _MesaCounter(label: "Total", count: total, color: Colors.white70),
-                        _MesaCounter(label: "Ocupadas", count: ocupadasConReservas, color: Colors.orangeAccent),
-                        _MesaCounter(label: "Libres", count: libres, color: Colors.greenAccent),
-                      ],
-                    ),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(icon, color: color, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
                         ),
-                      ],
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    _MesaRowMobile(label: "Total", count: total, color: Colors.white70),
-                    const SizedBox(height: 6),
-                    _MesaRowMobile(label: "Ocupadas", count: ocupadasConReservas, color: Colors.orangeAccent),
-                    const SizedBox(height: 6),
-                    _MesaRowMobile(label: "Libres", count: libres, color: Colors.greenAccent),
                   ],
                 ),
-        );
-
-        if (onTap != null) {
-          return InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: content,
-          );
-        }
-        return content;
-      },
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _MesaCounter(label: "Total", count: total, color: Colors.white70),
+                    _MesaCounter(label: "Ocupadas", count: totalEnUso, color: Colors.orangeAccent),
+                    _MesaCounter(label: "Libres", count: libres, color: Colors.greenAccent),
+                  ],
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, color: color, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _MesaRowMobile(label: "Total", count: total, color: Colors.white70),
+                const SizedBox(height: 6),
+                _MesaRowMobile(label: "Ocupadas", count: totalEnUso, color: Colors.orangeAccent),
+                const SizedBox(height: 6),
+                _MesaRowMobile(label: "Libres", count: libres, color: Colors.greenAccent),
+              ],
+            ),
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: content,
+      );
+    }
+    return content;
   }
 }
 

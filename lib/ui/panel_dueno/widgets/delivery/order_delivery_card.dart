@@ -40,6 +40,16 @@ class _OrderDeliveryCardState extends State<OrderDeliveryCard>
 
   bool get _isAdmin => widget.userRol != 'repartidor';
 
+  /// Muestra solo la hora si el pedido es de hoy, o "dd/MM HH:mm" si es anterior.
+  String _formatTimestamp(DateTime ts) {
+    final now = DateTime.now();
+    final isToday =
+        ts.year == now.year && ts.month == now.month && ts.day == now.day;
+    return isToday
+        ? DateFormat('HH:mm').format(ts)
+        : DateFormat('dd/MM HH:mm').format(ts);
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = widget.data['estado'] ?? 'pendiente';
@@ -52,7 +62,7 @@ class _OrderDeliveryCardState extends State<OrderDeliveryCard>
     final driverName = widget.data['driverName'];
     final metodoPago = widget.data['metodoPago'] ?? 'efectivo';
     final timestamp = (widget.data['createdAt'] as Timestamp?)?.toDate();
-    final hora = timestamp != null ? DateFormat('HH:mm').format(timestamp) : '--:--';
+    final hora = timestamp != null ? _formatTimestamp(timestamp) : '--:--';
 
     // Obtener color del badge para el borde
     final badgeInfo = DeliveryBadge.getStatusInfo(status);

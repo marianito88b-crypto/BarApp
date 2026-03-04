@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../widgets/delivery/order_delivery_card.dart';
 import '../logic/delivery_logic.dart';
 
@@ -142,6 +143,95 @@ class _OrdersList extends StatelessWidget {
             });
 
             if (docs.isEmpty) return _buildEmptyState();
+
+            // Para el historial, agrupar por día con separadores visuales
+            if (!isActive) {
+              final List<dynamic> groupedItems = [];
+              final now = DateTime.now();
+              final yesterday = now.subtract(const Duration(days: 1));
+              String? currentDay;
+              for (final doc in docs) {
+                final data = doc.data() as Map<String, dynamic>;
+                final ts = data['createdAt'] as Timestamp?;
+                final date = ts?.toDate();
+                final String dayLabel;
+                if (date == null) {
+                  dayLabel = 'Sin fecha';
+                } else {
+                  final isToday = date.year == now.year &&
+                      date.month == now.month &&
+                      date.day == now.day;
+                  final isYesterday = date.year == yesterday.year &&
+                      date.month == yesterday.month &&
+                      date.day == yesterday.day;
+                  if (isToday) {
+                    dayLabel = 'Hoy — ${DateFormat('dd/MM/yyyy').format(date)}';
+                  } else if (isYesterday) {
+                    dayLabel = 'Ayer — ${DateFormat('dd/MM/yyyy').format(date)}';
+                  } else {
+                    dayLabel = DateFormat('dd/MM/yyyy').format(date);
+                  }
+                }
+                if (dayLabel != currentDay) {
+                  groupedItems.add(dayLabel);
+                  currentDay = dayLabel;
+                }
+                groupedItems.add(doc);
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: groupedItems.length,
+                itemBuilder: (context, index) {
+                  final item = groupedItems[index];
+                  if (item is String) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 16, bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Divider(
+                              color: Colors.white12,
+                              thickness: 1,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              item,
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(
+                              color: Colors.white12,
+                              thickness: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  final doc = item as QueryDocumentSnapshot;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: OrderDeliveryCard(
+                      placeId: placeId,
+                      docId: doc.id,
+                      data: doc.data() as Map<String, dynamic>,
+                      availableDrivers: availableDrivers,
+                      userRol: 'admin',
+                      isDetailed: false,
+                    ),
+                  );
+                },
+              );
+            }
 
             return ListView.separated(
               padding: const EdgeInsets.all(16),
