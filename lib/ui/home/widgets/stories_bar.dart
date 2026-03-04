@@ -3,10 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../models/story_item.dart';
 import 'package:barapp/screens/story_viewer_screen.dart' show StoryViewerScreen;
-// TODO: import '../../stories/story_upload_screen.dart';
 
-// --- (El DTO StoryGroup y la clase StoriesBar se mantienen casi igual, 
-//      pero fíjate abajo en el cambio dentro de _StoriesBarState) ---
 
 class StoryGroup {
   final String authorId;

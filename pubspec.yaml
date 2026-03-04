@@ -1,7 +1,7 @@
 name: barapp
 description: BarApp – guía social de restaurantes, bares, cafés y heladerías.
 publish_to: 'none'
-version: 2.0.5+8
+version: 2.0.6+9
 
 environment:
   sdk: ">=3.7.0 <4.0.0"

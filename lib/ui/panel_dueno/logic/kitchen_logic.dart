@@ -51,7 +51,7 @@ mixin KitchenLogicMixin<T extends StatefulWidget> on State<T> {
         .doc(placeId)
         .collection("orders")
         .where('estado', isEqualTo: 'pendiente')
-        // 🔥 QUITAMOS EL FILTRO 'requiereCocina' PARA QUE ENTRE TODO
+  
         .snapshots()
         .listen((snapshot) {
           // Lista actual de IDs en la base de datos

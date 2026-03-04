@@ -619,7 +619,7 @@ class _AdvancedMetricsScreenState extends State<AdvancedMetricsScreen>
             backgroundColor: Colors.green,
           ),
         );
-        // TODO: Implementar descarga para web si es necesario
+       
         return;
       }
 

@@ -91,7 +91,7 @@ class _ModalProcesarPagoState extends State<ModalProcesarPago> {
     // 1. Determinar monto: Si el input está vacío o es 0, usamos lo que falta.
     double montoIngresado = double.tryParse(_montoCtrl.text) ?? 0;
     
-    // Si el usuario no puso nada o puso 0, asumimos que quiere pagar TODO lo que resta
+ 
     if (montoIngresado <= 0) {
       montoIngresado = _faltaPagar;
     }

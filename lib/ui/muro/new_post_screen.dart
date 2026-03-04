@@ -273,7 +273,7 @@ class _NuevaPublicacionScreenState extends State<NuevaPublicacionScreen> {
                             Positioned.fill(
                               child: Image.file(
                                 _pickedImage!,
-                                fit: BoxFit.contain, // <--- MUESTRA TODO
+                                fit: BoxFit.contain,
                               ),
                             ),
                             // Botón para quitar la foto por si el usuario se arrepiente

@@ -654,8 +654,6 @@ class _CommunityWallScreenState extends State<CommunityWallScreen> {
                     data: data,
                     postReference: ref,
                     isFeatured: isDestacado,
-
-                    // 🔥 TODO EL PODER AQUÍ (Reportar, Bloquear, Destacar, Eliminar)
                     onMoreTap:
                         () => _showPostOptions(context, item, blockedProvider),
 

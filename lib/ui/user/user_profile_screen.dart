@@ -371,7 +371,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                       // El widget maneja la cancelación internamente
                                     },
                                     onEdit: () {
-                                      // TODO: Implementar edición de reserva
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
                                           content: Text(
@@ -694,7 +693,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     isGuest: isGuest,
                     onInstagramTap: instagramHandle.isNotEmpty
                         ? () async {
-                            // TODO: Implementar lógica de url launcher para Instagram
+                           
                           }
                         : null,
                   ),

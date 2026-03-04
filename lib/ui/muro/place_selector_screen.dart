@@ -10,7 +10,6 @@ class PlaceSelectorScreen extends StatefulWidget {
 
 class _PlaceSelectorScreenState extends State<PlaceSelectorScreen> {
   // Stream para obtener los bares. 
-  // TODO: Ajusta 'places' y 'name' a tu base de datos
   final Stream<QuerySnapshot> _placesStream = FirebaseFirestore.instance
       .collection('places') // 👈 ¿Es 'places' tu colección?
       .orderBy('name')       // 👈 ¿El campo es 'name'?
@@ -49,12 +48,12 @@ class _PlaceSelectorScreenState extends State<PlaceSelectorScreen> {
             itemCount: places.length,
             itemBuilder: (context, index) {
               final doc = places[index];
-              // TODO: Ajusta 'name' al nombre de tu campo
+           
               final data = doc.data() as Map<String, dynamic>;
               final placeName = data['name'] ?? 'Nombre no disponible';
               final placeId = doc.id;
 
-              // TODO: Puedes agregar más info si quieres (ej. foto, dirección)
+            
               final placeImageUrl = data['profileImageUrl'] ?? '';
 
               return ListTile(

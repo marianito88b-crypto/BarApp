@@ -972,7 +972,6 @@ Positioned.fill(
 // (Todos tus widgets _ImageView, _VideoView, _ProgressBars
 //  estaban perfectos, van aquí sin cambios)
 
-// --- WIDGET DE IMAGEN CORREGIDO (MUESTRA TODO SIN RECORTAR) ---
 class _ImageView extends StatelessWidget {
   final String url;
   const _ImageView({required this.url});
@@ -1222,7 +1221,6 @@ class _ReactionUserAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // TODO: Navegar al perfil del usuario si querés:
         // Navigator.push(context, MaterialPageRoute(
         //   builder: (_) => ProfileScreen(userId: info.uid),
         // ));

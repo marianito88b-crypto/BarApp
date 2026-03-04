@@ -209,7 +209,7 @@ class _PanelDuenoScreenState extends State<PanelDuenoScreen>
       );
     }
 
-    // 🔥 ENVOLVEMOS TODO EN EL STREAM DEL LUGAR
+
     return StreamBuilder<DocumentSnapshot>(
       stream: _placesStream,
       builder: (context, snapshot) {
