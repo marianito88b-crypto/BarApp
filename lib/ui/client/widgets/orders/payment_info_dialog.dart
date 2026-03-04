@@ -37,6 +37,22 @@ class _ClientPaymentInfoDialogState extends State<ClientPaymentInfoDialog> {
     return FutureBuilder<DocumentSnapshot>(
       future: _placeFuture,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            title: const Text(
+              'Error al cargar datos',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar',
+                    style: TextStyle(color: Colors.white54)),
+              ),
+            ],
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }

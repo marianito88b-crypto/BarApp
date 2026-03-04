@@ -31,7 +31,7 @@ class ClientOrderCard extends StatelessWidget {
 
     // Datos de pago
     final metodoPago = (data['metodoPago'] ?? 'efectivo').toString().toLowerCase();
-    final placeId = data['placeId'];
+    final placeId = data['placeId']?.toString();
 
     return Card(
       color: const Color(0xFF1E1E1E),
@@ -106,7 +106,7 @@ class ClientOrderCard extends StatelessWidget {
                         ),
                         Expanded(
                           child: Text(
-                            item['nombre'],
+                            (item['nombre'] ?? 'Producto').toString(),
                             style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 13,

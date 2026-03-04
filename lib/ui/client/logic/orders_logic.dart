@@ -118,6 +118,14 @@ mixin ClientOrdersLogicMixin<T extends StatefulWidget> on State<T> {
       }
     } catch (e) {
       debugPrint("Error abriendo WP: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("No se pudo abrir WhatsApp: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

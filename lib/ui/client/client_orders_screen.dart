@@ -21,6 +21,12 @@ class _ClientOrdersScreenState extends State<ClientOrdersScreen> with SingleTick
   }
 
   @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
