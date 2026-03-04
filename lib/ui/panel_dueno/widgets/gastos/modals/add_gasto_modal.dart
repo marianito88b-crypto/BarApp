@@ -279,10 +279,21 @@ class _AddGastoModalState extends State<AddGastoModal> {
   Future<void> _guardarGasto() async {
     if (montoController.text.isEmpty) return;
 
-    setState(() => isLoading = true);
-
     final double monto =
         double.tryParse(montoController.text.replaceAll(',', '.')) ?? 0.0;
+
+    if (monto <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("El monto debe ser mayor a cero"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
     final placeRef =
         FirebaseFirestore.instance.collection('places').doc(widget.placeId);
 
@@ -306,6 +317,8 @@ class _AddGastoModalState extends State<AddGastoModal> {
           });
         });
       } else {
+        // Si es deuda pero sin proveedor: guardar como pendiente
+        // Si no es deuda: guardar como pagado con el método seleccionado
         await placeRef.collection('gastos').add({
           'monto': monto,
           'categoria': categoriaSeleccionada,
@@ -313,7 +326,7 @@ class _AddGastoModalState extends State<AddGastoModal> {
           'nroRemito': remitoController.text,
           'proveedorId': proveedorId,
           'metodoPago': esDeuda ? 'pendiente' : metodoPago,
-          'estado': 'pagado',
+          'estado': esDeuda ? 'pendiente' : 'pagado',
           'fecha': FieldValue.serverTimestamp(),
         });
       }
@@ -325,10 +338,11 @@ class _AddGastoModalState extends State<AddGastoModal> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error al guardar: $e")),
       );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 }

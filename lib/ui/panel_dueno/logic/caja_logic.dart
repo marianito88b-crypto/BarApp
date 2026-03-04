@@ -75,6 +75,7 @@ mixin CajaLogicMixin {
     double ventasEfectivo = 0;
     double ventasDigital = 0;
     double gastosEfectivo = 0;
+    double totalCajaFuerte = 0;
 
     // Procesar Ventas desde la apertura del turno
     for (var doc in ventasSnapshot.docs) {
@@ -121,16 +122,32 @@ mixin CajaLogicMixin {
       }
     }
 
+    // 🔥 CRÍTICO: Descontar retiros a caja fuerte
+    // Los retiros a caja fuerte sacan físicamente dinero del cajón, por lo tanto
+    // deben reducir el saldo esperado aunque no sean un "gasto" contable.
+    final cajaFuerteSnapshot = await FirebaseFirestore.instance
+        .collection('places')
+        .doc(placeId)
+        .collection('movimientos_caja_fuerte')
+        .where('fecha', isGreaterThanOrEqualTo: fechaApertura)
+        .get();
+
+    for (var doc in cajaFuerteSnapshot.docs) {
+      final cf = doc.data();
+      totalCajaFuerte += (cf['monto'] as num?)?.toDouble() ?? 0.0;
+    }
+
     // Calcular saldo esperado
     // IMPORTANTE: El monto inicial NO se suma a lo vendido, solo se muestra separado
-    // El total esperado es: monto inicial + ventas efectivo - gastos efectivo
-    double totalEsperadoEnCaja = saldoInicial + ventasEfectivo - gastosEfectivo;
+    // El total esperado es: monto inicial + ventas efectivo - gastos efectivo - retiros a caja fuerte
+    double totalEsperadoEnCaja = saldoInicial + ventasEfectivo - gastosEfectivo - totalCajaFuerte;
 
     return {
       'ventasTotal': ventasTotal,
       'ventasEfectivo': ventasEfectivo,
       'ventasDigital': ventasDigital,
       'gastosEfectivo': gastosEfectivo,
+      'totalCajaFuerte': totalCajaFuerte,
       'totalEsperadoEnCaja': totalEsperadoEnCaja,
       'saldoInicial': saldoInicial, // Incluido explícitamente para referencia
     };

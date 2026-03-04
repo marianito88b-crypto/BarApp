@@ -41,6 +41,19 @@ class _GastosMovimientosListState extends State<GastosMovimientosList> {
           );
         }
 
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Center(
+              child: Text(
+                "Error al cargar movimientos: ${snapshot.error}",
+                style: const TextStyle(color: Colors.redAccent),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(40.0),
@@ -75,8 +88,8 @@ class _GastosMovimientosListState extends State<GastosMovimientosList> {
                 : Icons.arrow_downward_rounded;
 
             String montoTexto = esPendiente
-                ? "DEUDA \$${gasto['monto']}"
-                : "- \$${gasto['monto']}";
+                ? "DEUDA \$${NumberFormat("#,##0", "es_AR").format(gasto['monto'] ?? 0)}"
+                : "- \$${NumberFormat("#,##0", "es_AR").format(gasto['monto'] ?? 0)}";
 
             Color colorMonto = esPendiente ? Colors.blueAccent : Colors.redAccent;
 

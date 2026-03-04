@@ -224,8 +224,13 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
   // ===========================================================================
   Widget _buildPantallaCierre(QueryDocumentSnapshot sesionDoc) {
     final dataSesion = sesionDoc.data() as Map<String, dynamic>;
-    final double saldoInicial = (dataSesion['monto_inicial'] as num).toDouble();
-    final Timestamp fechaAperturaTS = dataSesion['fecha_apertura'];
+    final double saldoInicial = (dataSesion['monto_inicial'] as num?)?.toDouble() ?? 0.0;
+    final Timestamp? fechaAperturaTS = dataSesion['fecha_apertura'] as Timestamp?;
+
+    // Si el serverTimestamp todavía no se resolvió, mostrar spinner
+    if (fechaAperturaTS == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     // 🔥 FIX: Solo recrear el Future si cambió la sesión
     if (_totalesFuture == null || _lastSesionId != sesionDoc.id) {
@@ -245,6 +250,7 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
         final double ventasEfectivoTemp = totales['ventasEfectivo']!;
         final double ventasDigital = totales['ventasDigital']!;
         final double gastosEfectivoTemp = totales['gastosEfectivo']!;
+        final double totalCajaFuerte = totales['totalCajaFuerte'] ?? 0.0;
         final double totalEsperadoEnCaja = totales['totalEsperadoEnCaja']!;
 
         // Usar valores locales directamente (sin mutar state en builder)
@@ -257,9 +263,34 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
             children: [
               _buildBadgeEstado(),
               const SizedBox(height: 10),
-              Text(
-                "Operador: ${dataSesion['usuario_apertura']?.split('@')[0].toUpperCase()}",
-                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Operador: ${dataSesion['usuario_apertura']?.split('@')[0].toUpperCase()}",
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                  const SizedBox(width: 12),
+                  // Botón de refrescar totales
+                  InkWell(
+                    onTap: () => setState(() => _totalesFuture = null),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.refresh, color: Colors.white38, size: 14),
+                          SizedBox(width: 4),
+                          Text("Actualizar", style: TextStyle(color: Colors.white38, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 30),
 
@@ -378,6 +409,10 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
                     ),
                     const SizedBox(height: 12),
                     CajaInfoRow(label: "- Gastos / Retiros", amount: gastosEfectivo, color: Colors.redAccent, isBold: true, scale: 1.1),
+                    if (totalCajaFuerte > 0) ...[                      
+                      const SizedBox(height: 4),
+                      CajaInfoRow(label: "- Retiros a Caja Fuerte", amount: totalCajaFuerte, color: Colors.amberAccent, isBold: true, scale: 1.1),
+                    ],
                   ],
                 ),
               ),
@@ -653,6 +688,7 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
                             totalEsperadoEnCaja,
                             ventasEfectivo,
                             gastosEfectivo,
+                            totalCajaFuerte,
                           );
                         },
                   child: _loading
@@ -682,7 +718,7 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
     );
   }
 
-  void _confirmarCierre(String sesionId, double esperado, double ventasEfectivo, double gastosEfectivo) {
+  void _confirmarCierre(String sesionId, double esperado, double ventasEfectivo, double gastosEfectivo, double totalCajaFuerte) {
     // Calcular ajuste de caja chica si fue ingresado
     double ajusteCajaChica = 0;
     if (_montoAjusteCtrl.text.trim().isNotEmpty) {
@@ -726,12 +762,12 @@ class _ControlCajaScreenState extends State<ControlCajaScreen>
               double real = double.tryParse(_montoCtrl.text) ?? 0;
               
               // Si hay ajuste de caja chica, ajustamos el esperado
-              // El esperado original es: monto inicial + ventas efectivo - gastos efectivo
-              // Si ajustamos la caja chica, el nuevo esperado es: monto ajustado + ventas efectivo - gastos efectivo
+              // El esperado original es: monto inicial + ventas efectivo - gastos efectivo - retiros caja fuerte
+              // Si ajustamos la caja chica, el nuevo esperado usa el monto ajustado
               double esperadoAjustado = esperado;
               if (_montoAjusteCtrl.text.trim().isNotEmpty) {
                 final montoAjuste = double.tryParse(_montoAjusteCtrl.text) ?? 0;
-                esperadoAjustado = montoAjuste + ventasEfectivo - gastosEfectivo;
+                esperadoAjustado = montoAjuste + ventasEfectivo - gastosEfectivo - totalCajaFuerte;
               }
               
               double diferencia = real - esperadoAjustado;
