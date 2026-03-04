@@ -54,23 +54,34 @@ mixin CajaLogicMixin {
     Timestamp fechaApertura,
     double saldoInicial,
   ) async {
-    // Obtener ventas desde la fecha de apertura
-    final ventasSnapshot = await FirebaseFirestore.instance
-        .collection('places')
-        .doc(placeId)
-        .collection('ventas')
-        .where('fecha', isGreaterThanOrEqualTo: fechaApertura)
-        .get();
-
-    // 🔥 CRÍTICO: Obtener SOLO gastos pagados en efectivo desde la fecha de apertura del turno
-    // Esto es vital para un arqueo exacto de la caja
-    final gastosSnapshot = await FirebaseFirestore.instance
-        .collection('places')
-        .doc(placeId)
-        .collection('gastos')
-        .where('fecha', isGreaterThanOrEqualTo: fechaApertura)
-        .where('estado', isEqualTo: 'pagado')
-        .get();
+    // ⚡ Las 3 consultas son independientes — ejecutar en paralelo (3x más rápido)
+    final results = await Future.wait([
+      // [0] Ventas desde la fecha de apertura
+      FirebaseFirestore.instance
+          .collection('places')
+          .doc(placeId)
+          .collection('ventas')
+          .where('fecha', isGreaterThanOrEqualTo: fechaApertura)
+          .get(),
+      // [1] Gastos pagados desde la apertura
+      FirebaseFirestore.instance
+          .collection('places')
+          .doc(placeId)
+          .collection('gastos')
+          .where('fecha', isGreaterThanOrEqualTo: fechaApertura)
+          .where('estado', isEqualTo: 'pagado')
+          .get(),
+      // [2] Retiros a caja fuerte desde la apertura
+      FirebaseFirestore.instance
+          .collection('places')
+          .doc(placeId)
+          .collection('movimientos_caja_fuerte')
+          .where('fecha', isGreaterThanOrEqualTo: fechaApertura)
+          .get(),
+    ]);
+    final ventasSnapshot = results[0];
+    final gastosSnapshot = results[1];
+    final cajaFuerteSnapshot = results[2];
 
     double ventasTotal = 0;
     double ventasEfectivo = 0;
@@ -126,13 +137,6 @@ mixin CajaLogicMixin {
     // 🔥 CRÍTICO: Descontar retiros a caja fuerte
     // Los retiros a caja fuerte sacan físicamente dinero del cajón, por lo tanto
     // deben reducir el saldo esperado aunque no sean un "gasto" contable.
-    final cajaFuerteSnapshot = await FirebaseFirestore.instance
-        .collection('places')
-        .doc(placeId)
-        .collection('movimientos_caja_fuerte')
-        .where('fecha', isGreaterThanOrEqualTo: fechaApertura)
-        .get();
-
     for (var doc in cajaFuerteSnapshot.docs) {
       final cf = doc.data();
       totalCajaFuerte += (cf['monto'] as num?)?.toDouble() ?? 0.0;

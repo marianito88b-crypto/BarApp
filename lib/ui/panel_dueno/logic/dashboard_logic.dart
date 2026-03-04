@@ -25,7 +25,8 @@ mixin DashboardLogic on State<DashboardMobile> {
 
   Set<String> _knownReservasIds = {};
   Set<String> _knownPedidosIds = {};
-  bool _isFirstLoad = true;
+  bool _reservasFirstLoad = true;
+  bool _pedidosFirstLoad = true;
 
   /// Preferencias cargadas una sola vez para evitar lecturas de disco en streams.
   bool _autoPrintComandas = false;
@@ -149,6 +150,14 @@ mixin DashboardLogic on State<DashboardMobile> {
         .where('estado', isEqualTo: 'pendiente')
         .snapshots()
         .listen((snap) {
+      // La primera emisión solo memoriza los IDs existentes — sin alerta.
+      // Esto elimina la race condition del timer fijo de 3 s que causaba
+      // alertas falsas si Firestore tardaba más en responder.
+      if (_reservasFirstLoad) {
+        _reservasFirstLoad = false;
+        _knownReservasIds = snap.docs.map((d) => d.id).toSet();
+        return;
+      }
       _checkNewItems(
         snap,
         _knownReservasIds,
@@ -166,6 +175,11 @@ mixin DashboardLogic on State<DashboardMobile> {
         .where('origen', isEqualTo: 'app')
         .snapshots()
         .listen((snap) {
+      if (_pedidosFirstLoad) {
+        _pedidosFirstLoad = false;
+        _knownPedidosIds = snap.docs.map((d) => d.id).toSet();
+        return;
+      }
       _checkNewItems(
         snap,
         _knownPedidosIds,
@@ -173,12 +187,6 @@ mixin DashboardLogic on State<DashboardMobile> {
         Colors.greenAccent,
       );
       _knownPedidosIds = snap.docs.map((d) => d.id).toSet();
-    });
-
-    // Garantiza que _isFirstLoad se libere después de 3 segundos,
-    // independientemente de si los streams emiten (p.ej. bar sin pedidos online).
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) _isFirstLoad = false;
     });
   }
 
@@ -188,8 +196,6 @@ mixin DashboardLogic on State<DashboardMobile> {
     String message,
     Color color,
   ) {
-    if (_isFirstLoad) return;
-
     final currentIds = snap.docs.map((d) => d.id).toSet();
     final newItems = currentIds.difference(knownIds);
 

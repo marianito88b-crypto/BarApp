@@ -333,7 +333,7 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
         if (data['descuentoAplicado'] != null) {
           ventaPayload['descuentoAplicado'] = data['descuentoAplicado'];
         }
-        if (data['codigoDescuento'] != null && (data['codigoDescuento'] as String).isNotEmpty) {
+        if (data['codigoDescuento'] != null && data['codigoDescuento'].toString().isNotEmpty) {
           ventaPayload['codigoDescuento'] = data['codigoDescuento'];
         }
 
@@ -362,8 +362,8 @@ mixin DeliveryLogicMixin<T extends StatefulWidget> on State<T> {
       // Solo para cupones maestros (globales): los cupones personales (cuponId presente)
       // ya fueron atomicamente registrados en cupones_usados al crear el pedido.
       // ============================================================
-      final String? userId = freshData['userId'] as String?;
-      final String? codigoDescuento = freshData['codigoDescuento'] as String?;
+      final String? userId = freshData['userId']?.toString();
+      final String? codigoDescuento = freshData['codigoDescuento']?.toString();
       final double? descuentoAplicado = (freshData['descuentoAplicado'] as num?)?.toDouble();
       final bool cuponYaRegistrado = freshData['cuponId'] != null;
       
