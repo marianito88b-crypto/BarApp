@@ -46,8 +46,9 @@ class _AdvancedMetricsScreenState extends State<AdvancedMetricsScreen>
     final double real = (sesion['monto_final_real'] as num?)?.toDouble() ?? 0;
     final double diff = (sesion['diferencia'] as num?)?.toDouble() ?? 0;
     final String responsable = sesion['usuario_apertura'] ?? 'Desconocido';
-    final Timestamp tsApertura = sesion['fecha_apertura'];
-    final Timestamp? tsCierre = sesion['fecha_cierre'];
+    final Timestamp? tsApertura = sesion['fecha_apertura'] as Timestamp?;
+    if (tsApertura == null) return;
+    final Timestamp? tsCierre = sesion['fecha_cierre'] as Timestamp?;
 
     showModalBottomSheet(
       context: context,
@@ -364,7 +365,7 @@ class _AdvancedMetricsScreenState extends State<AdvancedMetricsScreen>
     final double total =
         (sesion['monto_sistema_calculado'] as num?)?.toDouble() ?? 0;
     final double diff = (sesion['diferencia'] as num?)?.toDouble() ?? 0;
-    final Timestamp ts = sesion['fecha_apertura'];
+    final Timestamp? ts = sesion['fecha_apertura'] as Timestamp?;
 
     Color statusColor = Colors.green;
     IconData icon = Icons.check_circle_outline;
@@ -393,7 +394,9 @@ class _AdvancedMetricsScreenState extends State<AdvancedMetricsScreen>
         title: Text(
           isOpen
               ? "TURNO ACTUAL (ABIERTO)"
-              : "Cierre ${DateFormat('dd/MM - HH:mm').format(ts.toDate())}",
+              : ts != null
+                  ? "Cierre ${DateFormat('dd/MM - HH:mm').format(ts.toDate())}"
+                  : "Cierre (sin fecha)",
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -521,33 +524,33 @@ class _AdvancedMetricsScreenState extends State<AdvancedMetricsScreen>
   }
 
   Future<void> _exportOrdersToCSV() async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Generando archivo CSV..."),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Generando archivo CSV..."),
+          duration: Duration(seconds: 2),
+        ),
+      );
 
-      // Obtener todas las ventas del lugar
+      // Obtener ventas del lugar (limitado a últimos 1000 registros por seguridad)
       final ventasSnapshot = await FirebaseFirestore.instance
           .collection('places')
           .doc(placeId)
           .collection('ventas')
           .orderBy('fecha', descending: true)
+          .limit(1000)
           .get();
 
+      if (!mounted) return;
+
       if (ventasSnapshot.docs.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("No hay pedidos para exportar"),
-              backgroundColor: Colors.orangeAccent,
-            ),
-          );
-        }
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("No hay pedidos para exportar"),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
         return;
       }
 
@@ -607,17 +610,15 @@ class _AdvancedMetricsScreenState extends State<AdvancedMetricsScreen>
       // Guardar archivo
       if (kIsWeb) {
         // Para web, usar download
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                "CSV generado (${ventasSnapshot.docs.length} pedidos). "
-                "En web, el archivo se descargará automáticamente.",
-              ),
-              backgroundColor: Colors.green,
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              "CSV generado (${ventasSnapshot.docs.length} pedidos). "
+              "En web, el archivo se descargará automáticamente.",
             ),
-          );
-        }
+            backgroundColor: Colors.green,
+          ),
+        );
         // TODO: Implementar descarga para web si es necesario
         return;
       }
@@ -630,25 +631,24 @@ class _AdvancedMetricsScreenState extends State<AdvancedMetricsScreen>
       final File file = File(filePath);
       await file.writeAsString(csvContent.toString());
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "✅ CSV exportado exitosamente\n"
-              "${ventasSnapshot.docs.length} pedidos\n"
-              "Guardado en: $filePath",
-            ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            "✅ CSV exportado exitosamente\n"
+            "${ventasSnapshot.docs.length} pedidos\n"
+            "Guardado en: $filePath",
           ),
-        );
-      }
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
+        ),
+      );
 
       debugPrint('✅ CSV exportado: $filePath');
     } catch (e) {
       debugPrint('❌ Error exportando CSV: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text("Error al exportar: $e"),
             backgroundColor: Colors.red,

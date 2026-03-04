@@ -40,21 +40,17 @@ class _TopClientsRankingState extends State<TopClientsRanking> {
           .collection('places')
           .doc(widget.placeId)
           .get();
-      
-      if (placeDoc.exists) {
-        final data = placeDoc.data();
-        setState(() {
-          _placeName = data?['nombre'] ?? widget.placeName ?? 'El Local';
-        });
-      } else {
+      if (!mounted) return;
+      final data = placeDoc.exists ? placeDoc.data() : null;
+      setState(() {
+        _placeName = data?['nombre'] ?? widget.placeName ?? 'El Local';
+      });
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _placeName = widget.placeName ?? 'El Local';
         });
       }
-    } catch (e) {
-      setState(() {
-        _placeName = widget.placeName ?? 'El Local';
-      });
     }
   }
 
@@ -95,43 +91,37 @@ class _TopClientsRankingState extends State<TopClientsRanking> {
             (clientsMap[userId]!['totalPedidos'] as num).toInt() + 1;
       }
 
-      // Obtener BarPoints y reputación de cada cliente
-      final List<Map<String, dynamic>> clientsList = [];
-      for (var clientData in clientsMap.values) {
-        final userId = clientData['userId'] as String;
-        
-        // Obtener BarPoints
-        final barPoints = await BarPointsService.obtenerBarPoints(userId);
-        clientData['barPoints'] = barPoints;
-
-        // Obtener reputación
-        var userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .get();
-        
-        if (!userDoc.exists) {
-          userDoc = await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(userId)
-              .get();
-        }
-
-        if (userDoc.exists) {
-          final userData = userDoc.data();
-          final reputacion = userData?['reputacion_cliente'] as Map<String, dynamic>?;
-          final promedioEstrellas =
-              (reputacion?['promedioEstrellas'] as num?)?.toDouble() ?? 0.0;
-          final imageUrl = userData?['imageUrl'] ?? userData?['photoUrl'];
-
-          clientData['promedioEstrellas'] = promedioEstrellas;
-          clientData['imageUrl'] = imageUrl;
-        } else {
-          clientData['promedioEstrellas'] = 0.0;
-        }
-
-        clientsList.add(clientData);
-      }
+      // Obtener BarPoints y reputación en paralelo (un batch por cliente, no secuencial)
+      final clientsToProcess = clientsMap.values.toList();
+      await Future.wait(
+        clientsToProcess.map((clientData) async {
+          final userId = clientData['userId'] as String;
+          // BarPoints + doc de usuario en paralelo
+          final results = await Future.wait<dynamic>([
+            BarPointsService.obtenerBarPoints(userId),
+            FirebaseFirestore.instance.collection('usuarios').doc(userId).get(),
+          ]);
+          clientData['barPoints'] = (results[0] as num?)?.toInt() ?? 0;
+          var userDoc = results[1] as DocumentSnapshot;
+          // Fallback a colección legacy 'users' si no existe en 'usuarios'
+          if (!userDoc.exists) {
+            userDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userId)
+                .get();
+          }
+          if (userDoc.exists) {
+            final userData = userDoc.data() as Map<String, dynamic>?;
+            final rep = userData?['reputacion_cliente'] as Map<String, dynamic>?;
+            clientData['promedioEstrellas'] =
+                (rep?['promedioEstrellas'] as num?)?.toDouble() ?? 0.0;
+            clientData['imageUrl'] = userData?['imageUrl'] ?? userData?['photoUrl'];
+          } else {
+            clientData['promedioEstrellas'] = 0.0;
+          }
+        }),
+      );
+      final clientsList = clientsToProcess;
 
       // Ordenar según el filtro seleccionado
       clientsList.sort((a, b) {
