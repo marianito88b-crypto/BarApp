@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:barapp/services/ventas_externas/ventas_externas_service.dart';
+import 'package:barapp/utils/panel_logic.dart' as panel_logic;
 
 /// Mixin que contiene la lógica de negocio para el carrito de ventas externas
 ///
@@ -11,8 +12,7 @@ mixin VentaExternaCartMixin<T extends StatefulWidget> on State<T> {
   final List<Map<String, dynamic>> cart = [];
 
   /// Calcula el total del carrito
-  double get cartTotal =>
-      cart.fold(0.0, (acc, item) => acc + (item['precio'] * item['cantidad']));
+  double get cartTotal => panel_logic.calcularCartTotal(cart);
 
   /// Agrega un producto al carrito o incrementa su cantidad si ya existe
   void agregarProducto(Map<String, dynamic> producto) {
@@ -68,14 +68,8 @@ mixin VentaExternaCheckoutMixin<T extends StatefulWidget> on State<T> {
   /// [total]: Total esperado de la venta
   /// 
   /// Retorna true si la suma coincide (con margen de error de 0.5), false en caso contrario.
-  bool validarPagoMixto(Map<String, double> pagoMixto, double total) {
-    final efectivo = pagoMixto['efectivo'] ?? 0.0;
-    final mp = pagoMixto['mercadopago'] ?? 0.0;
-    final transf = pagoMixto['transferencia'] ?? 0.0;
-    final suma = efectivo + mp + transf;
-
-    return (suma - total).abs() <= 0.5;
-  }
+  bool validarPagoMixto(Map<String, double> pagoMixto, double total) =>
+      panel_logic.validarPagoMixto(pagoMixto, total);
 
   /// Construye la estructura de pagos según el método seleccionado
   /// 
@@ -88,33 +82,12 @@ mixin VentaExternaCheckoutMixin<T extends StatefulWidget> on State<T> {
     required String metodoSeleccionado,
     required Map<String, double> pagoMixto,
     required double total,
-  }) {
-    List<Map<String, dynamic>> pagos = [];
-
-    if (metodoSeleccionado == 'Mixto') {
-      final efectivo = pagoMixto['efectivo'] ?? 0.0;
-      final mp = pagoMixto['mercadopago'] ?? 0.0;
-      final transf = pagoMixto['transferencia'] ?? 0.0;
-
-      if (efectivo > 0) {
-        pagos.add({'metodo': 'efectivo', 'monto': efectivo});
-      }
-      if (mp > 0) {
-        pagos.add({'metodo': 'mercadopago', 'monto': mp});
-      }
-      if (transf > 0) {
-        pagos.add({'metodo': 'transferencia', 'monto': transf});
-      }
-    } else {
-      // Pago simple
-      pagos.add({
-        'metodo': metodoSeleccionado.toLowerCase(),
-        'monto': total,
-      });
-    }
-
-    return pagos;
-  }
+  }) =>
+      panel_logic.construirPagos(
+        metodoSeleccionado: metodoSeleccionado,
+        pagoMixto: pagoMixto,
+        total: total,
+      );
 
   /// Registra una venta externa con productos usando el servicio estandarizado
   /// 

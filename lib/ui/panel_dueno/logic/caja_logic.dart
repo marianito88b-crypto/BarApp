@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:barapp/services/caja_service.dart';
+import 'package:barapp/utils/panel_logic.dart';
 
 /// Mixin que contiene la lógica de negocio para la gestión de caja
 /// 
@@ -140,7 +141,12 @@ mixin CajaLogicMixin {
     // Calcular saldo esperado
     // IMPORTANTE: El monto inicial NO se suma a lo vendido, solo se muestra separado
     // El total esperado es: monto inicial + ventas efectivo - gastos efectivo - retiros a caja fuerte
-    double totalEsperadoEnCaja = saldoInicial + ventasEfectivo - gastosEfectivo - totalCajaFuerte;
+    double totalEsperadoEnCaja = calcularTotalEsperado(
+      saldoInicial: saldoInicial,
+      ventasEfectivo: ventasEfectivo,
+      gastosEfectivo: gastosEfectivo,
+      totalCajaFuerte: totalCajaFuerte,
+    );
 
     return {
       'ventasTotal': ventasTotal,

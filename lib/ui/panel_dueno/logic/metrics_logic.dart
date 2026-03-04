@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:barapp/utils/panel_logic.dart' as panel_logic;
 
 /// Mixin que proporciona la lógica de datos para las métricas avanzadas.
 /// 
@@ -29,9 +30,7 @@ mixin MetricsLogicMixin<T extends StatefulWidget> on State<T> {
   double maxVentasProducto = 0;
 
   /// Determina si un método de pago es transferencia bancaria
-  bool esTransferencia(String metodo) {
-    return metodo.contains('transf') || metodo.contains('banco');
-  }
+  bool esTransferencia(String metodo) => panel_logic.esTransferencia(metodo);
 
   /// Obtiene el placeId del widget.
   /// 
