@@ -80,31 +80,30 @@ class _ClockInDialogState extends State<ClockInDialog> with StaffLogicMixin {
           .limit(1)
           .get();
 
-      if (mounted) {
-        if (staffQuery.docs.isNotEmpty) {
-          final staffData = staffQuery.docs.first.data();
-          // Buscar la foto del usuario en la colección usuarios
-          final uidStaff = staffQuery.docs.first.id;
-          final usuarioDoc = await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(uidStaff)
-              .get();
-          
-          final usuarioData = usuarioDoc.data();
-          final fotoUrl = usuarioData?['fotoUrl'] as String?;
-          
-          setState(() {
-            _usuarioNombre = staffData['nombre'] ?? 'Colaborador';
-            _usuarioFotoUrl = fotoUrl;
-            _isSearchingUser = false;
-          });
-        } else {
-          setState(() {
-            _usuarioNombre = null;
-            _usuarioFotoUrl = null;
-            _isSearchingUser = false;
-          });
-        }
+      if (!mounted) return;
+      if (staffQuery.docs.isNotEmpty) {
+        final staffData = staffQuery.docs.first.data();
+        // Buscar la foto del usuario en la colección usuarios
+        final uidStaff = staffQuery.docs.first.id;
+        final usuarioDoc = await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(uidStaff)
+            .get();
+
+        if (!mounted || _dniController.text.trim() != dni) return;
+        final fotoUrl = usuarioDoc.data()?['fotoUrl'] as String?;
+
+        setState(() {
+          _usuarioNombre = staffData['nombre'] ?? 'Colaborador';
+          _usuarioFotoUrl = fotoUrl;
+          _isSearchingUser = false;
+        });
+      } else {
+        setState(() {
+          _usuarioNombre = null;
+          _usuarioFotoUrl = null;
+          _isSearchingUser = false;
+        });
       }
     } catch (e) {
       debugPrint("Error buscando usuario: $e");
@@ -135,38 +134,38 @@ class _ClockInDialogState extends State<ClockInDialog> with StaffLogicMixin {
     try {
       final result = await registrarAsistencia(dni: dni);
 
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          if (result['success'] == true) {
-            _showSuccess = true;
-            _successMessage = result['message'] as String;
-            // Cerrar después de 2 segundos
-            Future.delayed(const Duration(seconds: 2), () {
-              if (mounted) {
-                Navigator.of(context).pop();
-              }
-            });
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result['message'] as String),
-                backgroundColor: Colors.redAccent,
-              ),
-            );
-          }
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      setState(() {
+        _isProcessing = false;
+        if (result['success'] == true) {
+          _showSuccess = true;
+          _successMessage = result['message'] as String;
+        }
+      });
+      if (result['success'] == true) {
+        // Cerrar después de 2 segundos
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) navigator.pop();
         });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Error al procesar el fichaje"),
-            backgroundColor: Colors.red,
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(result['message'] as String),
+            backgroundColor: Colors.redAccent,
           ),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Error al procesar el fichaje"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

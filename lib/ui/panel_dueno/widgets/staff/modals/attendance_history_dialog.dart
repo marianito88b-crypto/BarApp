@@ -370,7 +370,6 @@ class _AttendanceHistoryDialogState extends State<AttendanceHistoryDialog> with 
             ),
           );
         }
-        setState(() => _isExporting = false);
         return;
       }
 
@@ -614,7 +613,6 @@ class _AttendanceHistoryDialogState extends State<AttendanceHistoryDialog> with 
             ),
           );
         }
-        setState(() => _isCleaning = false);
         return;
       }
 

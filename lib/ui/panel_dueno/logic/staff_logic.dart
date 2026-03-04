@@ -40,6 +40,7 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
     required String dni,
     String? apodo,
   }) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // Verificar si el usuario ya está en el staff (prevenir duplicados)
       final staffDoc = await FirebaseFirestore.instance
@@ -50,27 +51,25 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
           .get();
 
       if (staffDoc.exists) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("⚠️ $nombre ya forma parte del equipo."),
-              backgroundColor: Colors.orangeAccent,
-            ),
-          );
-        }
+        if (!mounted) return false;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text("⚠️ $nombre ya forma parte del equipo."),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
         return false;
       }
 
       // Validar que el DNI esté presente (ahora es obligatorio)
       if (dni.trim().isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("El DNI es obligatorio para agregar miembros al staff"),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
+        if (!mounted) return false;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("El DNI es obligatorio para agregar miembros al staff"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
         return false;
       }
 
@@ -84,14 +83,13 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
           .get();
 
       if (dniDuplicado.docs.isNotEmpty && dniDuplicado.docs.first.id != uid) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Este DNI ya está registrado en el equipo"),
-              backgroundColor: Colors.orangeAccent,
-            ),
-          );
-        }
+        if (!mounted) return false;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("Este DNI ya está registrado en el equipo"),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
         return false;
       }
 
@@ -140,7 +138,7 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
 
       // Mostrar mensaje de éxito
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text("✅ $nombre agregado como ${rol.toUpperCase()}"),
             backgroundColor: Colors.green,
@@ -152,7 +150,7 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
     } catch (e) {
       debugPrint("Error agregando miembro al staff: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text("Error de conexión. Intenta nuevamente."),
             backgroundColor: Colors.red,
@@ -180,19 +178,19 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
     required String nombre,
     String? dni,
   }) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // Validar que el DNI esté presente (ahora es obligatorio)
       if (dni == null || dni.trim().isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "El DNI es obligatorio para agregar miembros al staff. Por favor, usa el método de agregar miembro desde el panel.",
-              ),
-              backgroundColor: Colors.redAccent,
+        if (!mounted) return false;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              "El DNI es obligatorio para agregar miembros al staff. Por favor, usa el método de agregar miembro desde el panel.",
             ),
-          );
-        }
+            backgroundColor: Colors.redAccent,
+          ),
+        );
         return false;
       }
 
@@ -204,16 +202,15 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
           .get();
 
       if (query.docs.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "Usuario no encontrado. Pídele que se registre primero.",
-              ),
-              backgroundColor: Colors.redAccent,
+        if (!mounted) return false;
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Usuario no encontrado. Pídele que se registre primero.",
             ),
-          );
-        }
+            backgroundColor: Colors.redAccent,
+          ),
+        );
         return false;
       }
 
@@ -232,7 +229,7 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
     } catch (e) {
       debugPrint("Error agregando miembro al staff: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text("Error de conexión"),
             backgroundColor: Colors.red,
@@ -291,6 +288,7 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
   ///
   /// [uid]: ID del documento del staff a eliminar
   Future<void> _eliminarStaff(String uid) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await FirebaseFirestore.instance
           .collection('places')
@@ -300,7 +298,7 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
           .delete();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text("Acceso eliminado"),
             backgroundColor: Colors.green,
@@ -310,7 +308,7 @@ mixin StaffLogicMixin<T extends StatefulWidget> on State<T> {
     } catch (e) {
       debugPrint("Error eliminando miembro del staff: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text("Error al eliminar. Intenta nuevamente."),
             backgroundColor: Colors.red,

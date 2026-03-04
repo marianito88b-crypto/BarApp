@@ -382,6 +382,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> with StaffLogicMixin 
       
       // Validar campos obligatorios
       if (nombreCompleto.isEmpty) {
+        setState(() => _isAdding = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -394,6 +395,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> with StaffLogicMixin 
       }
       
       if (dni.isEmpty) {
+        setState(() => _isAdding = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -405,6 +407,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> with StaffLogicMixin 
         return;
       }
       
+      final navigator = Navigator.of(context);
       final success = await agregarUsuarioAlStaff(
         uid: uid,
         email: email,
@@ -418,7 +421,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> with StaffLogicMixin 
         setState(() => _isAdding = false);
         
         if (success) {
-          Navigator.of(context).pop(); // Cerrar diálogo principal
+          navigator.pop(); // Cerrar diálogo principal
         }
       }
     }
