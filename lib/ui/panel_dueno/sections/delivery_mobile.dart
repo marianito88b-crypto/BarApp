@@ -79,7 +79,6 @@ void dispose() {
           ),
           if (isAdmin) _RendicionFlotaList(
             placeId: widget.placeId,
-            driversStream: _driversStream,
           ),
         ],
       ),
@@ -163,15 +162,24 @@ class _UnifiedOrdersList extends StatelessWidget {
 // =============================================================================
 class _RendicionFlotaList extends StatelessWidget {
   final String placeId;
-  final Stream<QuerySnapshot> driversStream;
-  
+
   const _RendicionFlotaList({
     required this.placeId,
-    required this.driversStream,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Stream propio — no comparte suscripción con el tab de pedidos.
+    // Compartir un broadcast stream puede dejar el StreamBuilder en
+    // ConnectionState.waiting indefinidamente si el stream ya emitió
+    // su último evento antes de que este widget se suscribiera.
+    final driversStream = FirebaseFirestore.instance
+        .collection('places')
+        .doc(placeId)
+        .collection('staff')
+        .where('rol', isEqualTo: 'repartidor')
+        .snapshots();
+
     return StreamBuilder<QuerySnapshot>(
       stream: driversStream,
       builder: (context, staffSnap) {
