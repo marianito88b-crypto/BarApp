@@ -131,16 +131,50 @@ mixin HomeLogicMixin<T extends StatefulWidget> on State<T> {
         return;
       }
 
+      // 1. Posición rápida desde caché (disponible de inmediato)
       final last = await Geolocator.getLastKnownPosition();
       if (last != null && mounted) {
         setState(() {
           _userLat = last.latitude;
           _userLng = last.longitude;
         });
+        // Recalcular distancias en los bares ya cargados con la posición cacheada
+        _recalculateDistances();
       }
-      // Actualizamos distancia en los bares ya cargados si llega ubicación tarde
-      // (Opcional, para simplificar no lo re-calculo masivo aquí)
+
+      // 2. Posición precisa actual (puede tardar más, pero es más exacta)
+      final current = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.medium),
+      );
+      if (mounted) {
+        setState(() {
+          _userLat = current.latitude;
+          _userLng = current.longitude;
+        });
+        // Actualizar distancias con la posición más precisa
+        _recalculateDistances();
+      }
     } catch (_) {}
+  }
+
+  /// Recalcula la distancia de todos los lugares ya cargados con la ubicación actual.
+  ///
+  /// Necesario cuando la ubicación llega después de que los bares fueron cargados
+  /// (race condition entre _loadAllPlaces y _loadLocation).
+  void _recalculateDistances() {
+    if (_userLat == null || _userLng == null) return;
+    for (final p in _places) {
+      if (p.hasValidCoords) {
+        p.distance = Geolocator.distanceBetween(
+          _userLat!,
+          _userLng!,
+          p.lat,
+          p.lng,
+        );
+      }
+    }
+    if (mounted) setState(() {}); // Refrescar UI con las nuevas distancias
   }
 
   /// Suscribe al stream de seguimiento del usuario para actualizar contadores

@@ -33,6 +33,8 @@ class PlaceCard extends StatelessWidget {
 
     final String distanceText = _formatDistance(place.distance);
     final bool hasDistance = distanceText.isNotEmpty;
+    // < 1 km: persona caminando (cercano); >= 1 km: icono de ubicación (lejos)
+    final bool isNear = place.distance != null && place.distance! < 1000;
     const brandColor = Color(0xFFFF7F50);
 
     return AnimatedContainer(
@@ -224,12 +226,22 @@ class PlaceCard extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.15),
+                                  // Verde suave si está cerca, blanco translúcido si está lejos
+                                  color: isNear
+                                      ? Colors.green.withValues(alpha: 0.35)
+                                      : Colors.white.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.near_me_rounded, color: Colors.white, size: 12),
+                                    Icon(
+                                      // Persona caminando = cerca (<1km), pin = lejos
+                                      isNear
+                                          ? Icons.directions_walk_rounded
+                                          : Icons.near_me_rounded,
+                                      color: Colors.white,
+                                      size: 12,
+                                    ),
                                     const SizedBox(width: 6),
                                     Text(distanceText,
                                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
