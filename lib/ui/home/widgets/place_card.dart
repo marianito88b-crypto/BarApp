@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:barapp/models/place.dart';
-import 'dart:ui'; 
+import 'package:barapp/utils/distance_utils.dart';
+import 'dart:ui';
 
 class PlaceCard extends StatelessWidget {
   final Place place;
@@ -31,10 +32,10 @@ class PlaceCard extends StatelessWidget {
       bottomLeft: Radius.circular(12),
     );
 
-    final String distanceText = _formatDistance(place.distance);
+    final String distanceText = DistanceUtils.format(place.distance);
     final bool hasDistance = distanceText.isNotEmpty;
     // < 1 km: persona caminando (cercano); >= 1 km: icono de ubicación (lejos)
-    final bool isNear = place.distance != null && place.distance! < 1000;
+    final bool isNear = DistanceUtils.isNear(place.distance);
     const brandColor = Color(0xFFFF7F50);
 
     return AnimatedContainer(
@@ -273,13 +274,4 @@ class PlaceCard extends StatelessWidget {
     );
   }
 
-  String _formatDistance(double? distanceMeters) {
-    if (distanceMeters == null || distanceMeters < 0) return '';
-    if (distanceMeters >= 1000) {
-      final km = distanceMeters / 1000.0;
-      return '${km.toStringAsFixed(1)} km';
-    } else {
-      return '${(distanceMeters / 10).round() * 10} m';
-    }
-  }
 }

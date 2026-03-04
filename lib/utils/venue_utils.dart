@@ -41,23 +41,18 @@ class VenueUtils {
     }
   }
 
-  /// Verifica si un local está abierto en este momento
+  /// Verifica si un local está abierto en este momento.
   ///
   /// [data]: Mapa con los datos del local desde Firestore
-  /// Debe contener:
-  /// - `aceptaPedidos` (bool): Si el local acepta pedidos
-  /// - `horarioApertura` (String): Hora de apertura del primer turno (formato "HH:mm")
-  /// - `horarioCierre` (String): Hora de cierre del primer turno (formato "HH:mm")
-  /// - `tieneDobleTurno` (bool, opcional): Si tiene segundo turno
-  /// - `horarioApertura2` (String, opcional): Hora de apertura del segundo turno
-  /// - `horarioCierre2` (String, opcional): Hora de cierre del segundo turno
+  /// [now]: Hora a evaluar — omitir en producción (usa `DateTime.now()`),
+  ///        pasar un valor fijo en tests para resultados determinísticos.
   ///
   /// Retorna `true` si:
   /// 1. El local acepta pedidos (`aceptaPedidos == true`)
   /// 2. La hora actual está dentro del primer turno O del segundo turno (si existe)
   ///
   /// Maneja correctamente los horarios que cruzan medianoche (ej: 20:00 a 03:00)
-  static bool isVenueOpen(Map<String, dynamic> data) {
+  static bool isVenueOpen(Map<String, dynamic> data, {DateTime? now}) {
     // Si no acepta pedidos, está cerrado
     final aceptaPedidos = data['aceptaPedidos'] ?? true;
     if (!aceptaPedidos) {
@@ -65,8 +60,8 @@ class VenueUtils {
     }
 
     // Obtener hora actual en minutos desde medianoche
-    final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
+    final current = now ?? DateTime.now();
+    final currentMinutes = current.hour * 60 + current.minute;
 
     // Verificar primer turno
     final horarioApertura = data['horarioApertura'] as String?;
